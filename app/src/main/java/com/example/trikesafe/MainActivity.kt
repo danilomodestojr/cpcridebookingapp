@@ -1,5 +1,6 @@
 package com.example.trikesafe
 
+import android.content.Context
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.widget.Button
@@ -13,6 +14,21 @@ import kotlinx.coroutines.launch
 class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Check if already logged in
+        val sharedPref = getSharedPreferences("login_pref", Context.MODE_PRIVATE)
+        val loggedInRole = sharedPref.getString("user_role", null)
+
+        if (loggedInRole != null) {
+            when (loggedInRole) {
+                "driver" -> startActivity(Intent(this, DriverActivity::class.java))
+                "passenger" -> startActivity(Intent(this, PassengerActivity::class.java))
+            }
+            finish()
+            return
+        }
+
+
         setContentView(R.layout.activity_main)
 
         val loginButton = findViewById<Button>(R.id.loginButton)
@@ -54,9 +70,23 @@ class MainActivity : AppCompatActivity() {
 
     private fun handleLoginResponse(response: ApiResponse) {
         if (response.success) {
+
+            // Save login state
+            val sharedPref = getSharedPreferences("login_pref", Context.MODE_PRIVATE)
+            with(sharedPref.edit()) {
+                putString("user_role", response.role?.lowercase())
+                apply()
+            }
+
             when (response.role) {
-                "driver" -> startActivity(Intent(this, DriverActivity::class.java))
-                "passenger" -> startActivity(Intent(this, PassengerActivity::class.java))
+                "driver" -> {
+                    startActivity(Intent(this, DriverActivity::class.java))
+                    finish()  // Add this
+                }
+                "passenger" -> {
+                    startActivity(Intent(this, PassengerActivity::class.java))
+                    finish()  // Add this
+                }
                 else -> Toast.makeText(this, "Invalid role", Toast.LENGTH_SHORT).show()
             }
         } else {
