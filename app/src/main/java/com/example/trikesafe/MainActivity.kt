@@ -7,6 +7,8 @@ import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
 import android.content.Intent
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -19,15 +21,46 @@ class MainActivity : AppCompatActivity() {
         val registerLink = findViewById<TextView>(R.id.registerLink)
 
         loginButton.setOnClickListener {
-            val email = emailInput.text.toString()
+            val username = emailInput.text.toString()
             val password = passwordInput.text.toString()
 
-            // TODO: Add API connection
-            Toast.makeText(this, "Login clicked", Toast.LENGTH_SHORT).show()
+            if (username.isEmpty() || password.isEmpty()) {
+                Toast.makeText(this, "Please fill all fields", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            loginUser(username, password)
         }
 
         registerLink.setOnClickListener {
             startActivity(Intent(this, RegisterActivity::class.java))
+        }
+    }
+
+    private fun loginUser(username: String, password: String) {
+        lifecycleScope.launch {
+            try {
+                val response = ApiClient.api.loginUser(LoginRequest(username, password))
+                if (response.isSuccessful) {
+                    response.body()?.let { handleLoginResponse(it) }
+                } else {
+                    Toast.makeText(this@MainActivity, "Login failed", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                Toast.makeText(this@MainActivity, "Network error", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun handleLoginResponse(response: ApiResponse) {
+        if (response.success) {
+            when (response.role) {
+                "driver" -> startActivity(Intent(this, DriverActivity::class.java))
+                "passenger" -> startActivity(Intent(this, PassengerActivity::class.java))
+                else -> Toast.makeText(this, "Invalid role", Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            Toast.makeText(this, response.message, Toast.LENGTH_SHORT).show()
         }
     }
 }
