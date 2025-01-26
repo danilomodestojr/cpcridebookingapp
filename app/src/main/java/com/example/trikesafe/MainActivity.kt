@@ -20,14 +20,19 @@ class MainActivity : AppCompatActivity() {
         val loggedInRole = sharedPref.getString("user_role", null)
 
         if (loggedInRole != null) {
+            // If user_role is found, go directly to the correct screen
             when (loggedInRole) {
-                "driver" -> startActivity(Intent(this, DriverActivity::class.java))
-                "passenger" -> startActivity(Intent(this, PassengerActivity::class.java))
+                "driver" -> {
+                    startActivity(Intent(this, DriverActivity::class.java))
+                    finish()
+                }
+                "passenger" -> {
+                    startActivity(Intent(this, PassengerActivity::class.java))
+                    finish()
+                }
             }
-            finish()
             return
         }
-
 
         setContentView(R.layout.activity_main)
 
@@ -56,6 +61,7 @@ class MainActivity : AppCompatActivity() {
     private fun loginUser(username: String, password: String) {
         lifecycleScope.launch {
             try {
+                // Make sure your ApiClient.api.loginUser returns ApiResponse with userId
                 val response = ApiClient.api.loginUser(LoginRequest(username, password))
                 if (response.isSuccessful) {
                     response.body()?.let { handleLoginResponse(it) }
@@ -70,26 +76,29 @@ class MainActivity : AppCompatActivity() {
 
     private fun handleLoginResponse(response: ApiResponse) {
         if (response.success) {
-
-            // Save login state
+            // Save login state (user role AND user ID!)
             val sharedPref = getSharedPreferences("login_pref", Context.MODE_PRIVATE)
             with(sharedPref.edit()) {
-                putString("user_role", response.role?.lowercase())
+                putString("user_role", response.role?.lowercase()) // store the role
+                putInt("user_id", response.userId ?: 0)            // store the user ID
                 apply()
             }
 
-            when (response.role) {
+            when (response.role?.lowercase()) {
                 "driver" -> {
                     startActivity(Intent(this, DriverActivity::class.java))
-                    finish()  // Add this
+                    finish()
                 }
                 "passenger" -> {
                     startActivity(Intent(this, PassengerActivity::class.java))
-                    finish()  // Add this
+                    finish()
                 }
-                else -> Toast.makeText(this, "Invalid role", Toast.LENGTH_SHORT).show()
+                else -> {
+                    Toast.makeText(this, "Invalid role: ${response.role}", Toast.LENGTH_SHORT).show()
+                }
             }
         } else {
+            // Show error if login unsuccessful
             Toast.makeText(this, response.message, Toast.LENGTH_SHORT).show()
         }
     }

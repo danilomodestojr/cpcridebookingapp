@@ -15,6 +15,7 @@ interface ApiService {
 data class ApiResponse(
     val success: Boolean,
     val message: String,
+    val userId: Int?,
     val role: String? = null
 )
 
