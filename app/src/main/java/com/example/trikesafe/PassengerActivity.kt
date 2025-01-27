@@ -14,6 +14,7 @@ import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import android.Manifest
+import android.util.Log
 import android.view.MotionEvent
 import androidx.appcompat.app.AlertDialog
 import com.google.android.material.floatingactionbutton.FloatingActionButton
@@ -33,10 +34,12 @@ class PassengerActivity : AppCompatActivity() {
 
         map = findViewById(R.id.mapView)
         map.setTileSource(TileSourceFactory.MAPNIK)
+        map.setMultiTouchControls(true)
 
         val mapController = map.controller
         mapController.setZoom(19.0)
         val startPoint = GeoPoint(11.5830094, 122.7530419)
+        Log.d("PassengerActivity", "Setting map center: lat=${startPoint.latitude}, lon=${startPoint.longitude}")
         mapController.setCenter(startPoint)
 
         bookingManager = BookingManager(this, map, currentLocation)
@@ -86,11 +89,22 @@ class PassengerActivity : AppCompatActivity() {
                     override fun onSingleTapConfirmed(e: MotionEvent?, mapView: MapView?): Boolean {
                         e?.let {
                             val tappedPoint = mapView?.projection?.fromPixels(e.x.toInt(), e.y.toInt())
+
+                            // Log raw tapped coordinates
+                            Log.d("PassengerActivity", "Tapped coords: lat=${tappedPoint?.latitude}, lon=${tappedPoint?.longitude}")
+
                             tappedPoint?.let { point ->
                                 map.overlays.clear()
-                                addMarker(GeoPoint(point.latitude, point.longitude))
-                                currentLocation = GeoPoint(point.latitude, point.longitude)
+                                // Use exact coordinates without modification
+                                val geoPoint = GeoPoint(point.latitude, point.longitude)
+                                Log.d("PassengerActivity", "Creating GeoPoint: lat=${geoPoint.latitude}, lon=${geoPoint.longitude}")
+
+                                addMarker(geoPoint)
+                                currentLocation = geoPoint
                                 bookingManager.updateCurrentLocation(currentLocation)
+
+                                // Log final stored location
+                                Log.d("PassengerActivity", "Stored location: lat=${currentLocation?.latitude}, lon=${currentLocation?.longitude}")
                             }
                         }
                         return true

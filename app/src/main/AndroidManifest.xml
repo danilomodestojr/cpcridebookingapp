@@ -35,6 +35,9 @@
             android:exported="true" />
         <activity android:name=".PassengerActivity"
             android:exported="true" />
+        <activity
+            android:name=".BookingDetailActivity"
+            android:exported="false" />
     </application>
 
 </manifest>

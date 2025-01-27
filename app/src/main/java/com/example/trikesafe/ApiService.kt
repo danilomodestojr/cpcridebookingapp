@@ -1,7 +1,9 @@
 package com.example.trikesafe
 
+import retrofit2.Call
 import retrofit2.Response
 import retrofit2.http.Body
+import retrofit2.http.GET
 import retrofit2.http.POST
 
 interface ApiService {
@@ -10,6 +12,9 @@ interface ApiService {
 
     @POST("login_process.php")
     suspend fun loginUser(@Body loginRequest: LoginRequest): Response<ApiResponse>
+
+    @GET("bookings.php?status=pending")
+    fun getPendingBookings(): Call<List<Booking>>
 }
 
 data class ApiResponse(

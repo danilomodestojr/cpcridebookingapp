@@ -15,6 +15,9 @@ class BookingManager(
     private var currentLocation: GeoPoint?
 ) {
 
+    private val client = OkHttpClient()
+    private val url = "http://192.168.254.108:80/trikesafe-admin/bookings.php"
+
     fun updateCurrentLocation(location: GeoPoint?) {
         currentLocation = location
     }
@@ -68,10 +71,17 @@ class BookingManager(
                     override fun onSingleTapConfirmed(e: MotionEvent?, mapView: MapView?): Boolean {
                         e?.let {
                             val tappedPoint = mapView?.projection?.fromPixels(e.x.toInt(), e.y.toInt())
+
+                            // Log raw tapped coordinates
+                            Log.d("BookingManager", "Tapped coords: lat=${tappedPoint?.latitude}, lon=${tappedPoint?.longitude}")
+
                             tappedPoint?.let { point ->
+                                // Use exact coordinates without modification
                                 val destPoint = GeoPoint(point.latitude, point.longitude)
-                                map.overlays.clear() // Clear previous markers
-                                addMarker(currentLocation!!) // Re-add pickup marker
+                                Log.d("BookingManager", "Creating destination GeoPoint: lat=${destPoint.latitude}, lon=${destPoint.longitude}")
+
+                                map.overlays.clear()
+                                addMarker(currentLocation!!)
                                 addDestinationMarker(destPoint)
                                 calculateFare(destPoint, callback)
                             }
@@ -134,21 +144,25 @@ class BookingManager(
         val sharedPreferences = context.getSharedPreferences("login_pref", Context.MODE_PRIVATE)
         val passengerId = sharedPreferences.getInt("user_id", 0)
 
-        val url = "http://192.168.254.108:80/trikesafe-admin/bookings.php"
-        val client = OkHttpClient()
+        // Log coordinates before creating FormBody
+        Log.d("BookingManager", "Saving booking: pickup_lat=${currentLocation?.latitude}, pickup_long=${currentLocation?.longitude}")
+        Log.d("BookingManager", "Saving booking: dropoff_lat=${destination.latitude}, dropoff_long=${destination.longitude}")
 
         val formBody = FormBody.Builder()
             .add("passenger_id", passengerId.toString())
             .add("booking_type", "regular")
             .add("pickup_location", "Current Location")
             .add("dropoff_location", "Destination")
-            .add("pickup_latitude", currentLocation?.latitude.toString())
-            .add("pickup_longitude", currentLocation?.longitude.toString())
+            .add("pickup_latitude", currentLocation?.latitude?.toString() ?: "0.0")
+            .add("pickup_longitude", currentLocation?.longitude?.toString() ?: "0.0")
             .add("dropoff_latitude", destination.latitude.toString())
             .add("dropoff_longitude", destination.longitude.toString())
             .add("distance_km", distance.toString())
             .add("total_fare", fare.toString())
             .build()
+
+        // Log the actual form data being sent
+        Log.d("BookingManager", "Form data: ${formBody.toString()}")
 
         val request = Request.Builder()
             .url(url)
