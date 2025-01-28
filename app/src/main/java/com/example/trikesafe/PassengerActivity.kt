@@ -1,5 +1,4 @@
 package com.example.trikesafe
-
 import BookingManager
 import android.content.Context
 import android.content.Intent
@@ -20,6 +19,9 @@ import androidx.appcompat.app.AlertDialog
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Overlay
+import retrofit2.Call
+import retrofit2.Callback
+import retrofit2.Response
 
 class PassengerActivity : AppCompatActivity() {
     private lateinit var map: MapView
@@ -29,6 +31,61 @@ class PassengerActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Check for active booking first
+        val sharedPreferences = getSharedPreferences("login_pref", Context.MODE_PRIVATE)
+        val passengerId = sharedPreferences.getInt("user_id", 0)
+
+        if (passengerId > 0) {
+            checkActiveBooking(passengerId)
+        } else {
+            showError("User ID not found. Please login again.")
+            startActivity(Intent(this, MainActivity::class.java))
+            finish()
+            return
+        }
+    }
+
+    private fun checkActiveBooking(passengerId: Int) {
+        val loadingDialog = AlertDialog.Builder(this)
+            .setMessage("Checking booking status...")
+            .setCancelable(false)
+            .create()
+        loadingDialog.show()
+
+        ApiClient.api.getPassengerActiveBooking(passengerId).enqueue(object : Callback<Booking?> {
+            override fun onResponse(call: Call<Booking?>, response: Response<Booking?>) {
+                loadingDialog.dismiss()
+                if (response.isSuccessful) {
+                    response.body()?.let { booking ->
+                        // Has active booking, go to booking detail view
+                        startBookingDetailActivity(booking)
+                        finish()
+                    } ?: run {
+                        // No active booking, initialize normal passenger view
+                        initializePassengerView()
+                    }
+                } else {
+                    showError("Failed to check booking status")
+                    initializePassengerView()
+                }
+            }
+
+            override fun onFailure(call: Call<Booking?>, t: Throwable) {
+                loadingDialog.dismiss()
+                showError("Network error: ${t.message}")
+                initializePassengerView()
+            }
+        })
+    }
+
+    private fun startBookingDetailActivity(booking: Booking) {
+        val intent = Intent(this, PassengerBookingDetailActivity::class.java)
+        intent.putExtra("booking", booking)
+        startActivity(intent)
+    }
+
+    private fun initializePassengerView() {
         Configuration.getInstance().load(this, getSharedPreferences("osm_pref", Context.MODE_PRIVATE))
         setContentView(R.layout.activity_passenger)
 
@@ -90,12 +147,10 @@ class PassengerActivity : AppCompatActivity() {
                         e?.let {
                             val tappedPoint = mapView?.projection?.fromPixels(e.x.toInt(), e.y.toInt())
 
-                            // Log raw tapped coordinates
                             Log.d("PassengerActivity", "Tapped coords: lat=${tappedPoint?.latitude}, lon=${tappedPoint?.longitude}")
 
                             tappedPoint?.let { point ->
                                 map.overlays.clear()
-                                // Use exact coordinates without modification
                                 val geoPoint = GeoPoint(point.latitude, point.longitude)
                                 Log.d("PassengerActivity", "Creating GeoPoint: lat=${geoPoint.latitude}, lon=${geoPoint.longitude}")
 
@@ -103,7 +158,6 @@ class PassengerActivity : AppCompatActivity() {
                                 currentLocation = geoPoint
                                 bookingManager.updateCurrentLocation(currentLocation)
 
-                                // Log final stored location
                                 Log.d("PassengerActivity", "Stored location: lat=${currentLocation?.latitude}, lon=${currentLocation?.longitude}")
                             }
                         }

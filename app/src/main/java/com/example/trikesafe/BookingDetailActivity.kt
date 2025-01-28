@@ -1,24 +1,49 @@
 package com.example.trikesafe
 
+import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import android.util.Log
+import android.view.View
 import android.widget.Button
+import android.widget.ImageButton
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
+import org.osmdroid.util.BoundingBox
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
+import retrofit2.Call
+import retrofit2.Callback
+import retrofit2.Response
 
 class BookingDetailActivity : AppCompatActivity() {
     private lateinit var map: MapView
     private var booking: Booking? = null
+    private var isActiveBooking = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_booking_detail)
+
+        // Add logout button handling
+        findViewById<Button>(R.id.logoutButton).setOnClickListener {
+            showLogoutConfirmation()
+        }
+
+        // Check if this is an active booking
+        isActiveBooking = intent.getBooleanExtra("is_active", false)
+
+        // Setup back button - hide if active booking
+        findViewById<ImageButton>(R.id.backButton).apply {
+            visibility = if (isActiveBooking) View.GONE else View.VISIBLE
+            setOnClickListener {
+                finish()
+            }
+        }
 
         Log.d("BookingDetailActivity", "Started activity")
 
@@ -42,10 +67,33 @@ class BookingDetailActivity : AppCompatActivity() {
         displayBookingDetails(booking!!)
         setupMap(booking!!)
 
-        // Setup button
-        findViewById<Button>(R.id.acceptButton).setOnClickListener {
-            showAcceptConfirmation()
-        }
+        // Setup buttons based on booking state
+        setupButtons()
+    }
+
+    private fun showLogoutConfirmation() {
+        AlertDialog.Builder(this)
+            .setTitle("Logout")
+            .setMessage("You can log back in anytime to return to this active booking.")
+            .setPositiveButton("Logout") { _, _ ->
+                performLogout()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun performLogout() {
+        // Clear login preferences
+        getSharedPreferences("login_pref", Context.MODE_PRIVATE)
+            .edit()
+            .clear()
+            .apply()
+
+        // Return to login screen
+        val intent = Intent(this, MainActivity::class.java)
+        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        startActivity(intent)
+        finish()
     }
 
     private fun displayBookingDetails(booking: Booking) {
@@ -60,20 +108,15 @@ class BookingDetailActivity : AppCompatActivity() {
     }
 
     private fun setupMap(booking: Booking) {
-        // Set user agent to prevent tile loading issues
-        Configuration.getInstance().userAgentValue = packageName
-
         val pickupPoint = GeoPoint(booking.pickup_latitude, booking.pickup_longitude)
         val dropoffPoint = GeoPoint(booking.dropoff_latitude, booking.dropoff_longitude)
-
-        // Clear existing overlays
-        map.overlays.clear()
 
         // Add pickup marker
         val pickupMarker = Marker(map).apply {
             position = pickupPoint
             setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
             title = "Pickup Location"
+            snippet = booking.pickup_location
             icon = resources.getDrawable(android.R.drawable.ic_menu_mylocation)
         }
         map.overlays.add(pickupMarker)
@@ -83,31 +126,145 @@ class BookingDetailActivity : AppCompatActivity() {
             position = dropoffPoint
             setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
             title = "Dropoff Location"
+            snippet = booking.dropoff_location
             icon = resources.getDrawable(android.R.drawable.ic_menu_myplaces)
         }
         map.overlays.add(dropoffMarker)
 
-        // Configure map
-        map.setMultiTouchControls(true)
-        val mapController = map.controller
-        mapController.setZoom(16.0)
+        // Calculate bounding box for both points
+        val boundingBox = calculateBoundingBox(listOf(pickupPoint, dropoffPoint))
 
-        // Center map to show both points
-        val boundingBox = org.osmdroid.util.BoundingBox.fromGeoPoints(listOf(pickupPoint, dropoffPoint))
-        map.zoomToBoundingBox(boundingBox, true)
-
-        // Force map update
-        map.invalidate()
+        // Apply zoom with padding
+        zoomToBox(boundingBox)
     }
 
-    private fun showAcceptConfirmation() {
-        AlertDialog.Builder(this)
-            .setTitle("Accept Booking")
-            .setMessage("Are you sure you want to accept this booking?")
-            .setPositiveButton("Accept") { _, _ ->
-                // We'll implement booking acceptance next
+    private fun calculateBoundingBox(points: List<GeoPoint>): BoundingBox {
+        var minLat = Double.POSITIVE_INFINITY
+        var maxLat = Double.NEGATIVE_INFINITY
+        var minLon = Double.POSITIVE_INFINITY
+        var maxLon = Double.NEGATIVE_INFINITY
+
+        points.forEach { point ->
+            minLat = minOf(minLat, point.latitude)
+            maxLat = maxOf(maxLat, point.latitude)
+            minLon = minOf(minLon, point.longitude)
+            maxLon = maxOf(maxLon, point.longitude)
+        }
+
+        // Add a small padding (about 20% of the range)
+        val latPadding = (maxLat - minLat) * 0.2
+        val lonPadding = (maxLon - minLon) * 0.2
+
+        return BoundingBox(
+            maxLat + latPadding,  // north
+            maxLon + lonPadding,  // east
+            minLat - latPadding,  // south
+            minLon - lonPadding   // west
+        )
+    }
+
+    private fun zoomToBox(boundingBox: BoundingBox) {
+        map.post {
+            try {
+                // Get the map's dimensions
+                val mapWidth = map.width
+                val mapHeight = map.height
+
+                if (mapWidth > 0 && mapHeight > 0) {
+                    // Animate zoom to bounding box
+                    map.zoomToBoundingBox(boundingBox, true, 50)
+
+                    // Ensure minimum zoom level for urban area visibility
+                    if (map.zoomLevelDouble < 14.0) {
+                        map.controller.setZoom(14.0)
+                    }
+                } else {
+                    // Fallback if map dimensions aren't ready
+                    map.controller.setZoom(15.0)
+                    map.controller.setCenter(boundingBox.centerWithDateLine)
+                }
+            } catch (e: Exception) {
+                Log.e("BookingDetailActivity", "Error zooming to points: ${e.message}")
+                // Fallback to default zoom
+                map.controller.setZoom(15.0)
+                map.controller.setCenter(boundingBox.centerWithDateLine)
             }
-            .setNegativeButton("Cancel", null)
+        }
+    }
+
+    private fun setupButtons() {
+        val acceptButton = findViewById<Button>(R.id.acceptButton)
+        val completeButton = findViewById<Button>(R.id.completeButton)
+
+        if (isActiveBooking) {
+            // Hide accept button, show complete button
+            acceptButton.visibility = View.GONE
+            completeButton.apply {
+                visibility = View.VISIBLE
+                setOnClickListener {
+                    showCompleteConfirmation()
+                }
+            }
+        } else {
+            // Show accept button, hide complete button
+            acceptButton.visibility = View.VISIBLE
+            completeButton.visibility = View.GONE
+            acceptButton.setOnClickListener {
+                showAcceptConfirmation()
+            }
+        }
+    }
+
+    private fun showCompleteConfirmation() {
+        AlertDialog.Builder(this)
+            .setTitle("Mark as Complete")
+            .setMessage("Have you completed this trip? Note: The booking will only be marked as complete after passenger confirmation.")
+            .setPositiveButton("Yes") { _, _ ->
+                markBookingAsCompleteByDriver()
+            }
+            .setNegativeButton("No", null)
+            .show()
+    }
+
+    private fun markBookingAsCompleteByDriver() {
+        val sharedPreferences = getSharedPreferences("login_pref", Context.MODE_PRIVATE)
+        val driverId = sharedPreferences.getInt("user_id", 0)
+
+        booking?.let { booking ->
+            val loadingDialog = AlertDialog.Builder(this)
+                .setMessage("Processing your request...")
+                .setCancelable(false)
+                .create()
+            loadingDialog.show()
+
+            ApiClient.api.markBookingComplete(
+                action = "driver_complete",
+                bookingId = booking.id,
+                driverId = driverId
+            ).enqueue(object : Callback<ApiResponse> {
+                override fun onResponse(call: Call<ApiResponse>, response: Response<ApiResponse>) {
+                    loadingDialog.dismiss()
+                    if (response.isSuccessful && response.body()?.success == true) {
+                        showWaitingForPassengerConfirmation()
+                    } else {
+                        showError("Failed to mark booking as complete. Please try again.")
+                    }
+                }
+
+                override fun onFailure(call: Call<ApiResponse>, t: Throwable) {
+                    loadingDialog.dismiss()
+                    showError("Network error: ${t.message}")
+                }
+            })
+        }
+    }
+
+    private fun showWaitingForPassengerConfirmation() {
+        AlertDialog.Builder(this)
+            .setTitle("Marked as Complete")
+            .setMessage("You have marked this booking as complete. Please wait for passenger confirmation.")
+            .setPositiveButton("OK", null)
+            .setCancelable(false)
             .show()
     }
 
@@ -117,6 +274,81 @@ class BookingDetailActivity : AppCompatActivity() {
             .setMessage(message)
             .setPositiveButton("OK", null)
             .show()
+    }
+
+    private fun acceptBooking() {
+        val sharedPreferences = getSharedPreferences("login_pref", Context.MODE_PRIVATE)
+        val driverId = sharedPreferences.getInt("user_id", 0)
+
+        if (driverId == 0) {
+            showError("Driver ID not found. Please login again.")
+            return
+        }
+
+        booking?.let { booking ->
+            // Show loading indicator
+            val loadingDialog = AlertDialog.Builder(this)
+                .setMessage("Processing your request...")
+                .setCancelable(false)
+                .create()
+            loadingDialog.show()
+
+            ApiClient.api.acceptBooking(
+                action = "accept",
+                bookingId = booking.id,
+                driverId = driverId
+            ).enqueue(object : Callback<ApiResponse> {
+                override fun onResponse(call: Call<ApiResponse>, response: Response<ApiResponse>) {
+                    loadingDialog.dismiss()
+                    if (response.isSuccessful && response.body()?.success == true) {
+                        showSuccessAndFinish()
+                    } else {
+                        showError("Failed to accept booking. It might have been taken by another driver.")
+                    }
+                }
+
+                override fun onFailure(call: Call<ApiResponse>, t: Throwable) {
+                    loadingDialog.dismiss()
+                    Log.e("BookingDetailActivity", "Error accepting booking: ${t.message}")
+                    showError("Network error: ${t.message}")
+                }
+            })
+        }
+    }
+
+    private fun showSuccessAndFinish() {
+        AlertDialog.Builder(this)
+            .setTitle("Success")
+            .setMessage("You have accepted this booking. The passenger will be notified.")
+            .setPositiveButton("OK") { _, _ ->
+                setResult(RESULT_OK)
+                finish()
+            }
+            .setCancelable(false)
+            .show()
+    }
+
+    private fun showAcceptConfirmation() {
+        AlertDialog.Builder(this)
+            .setTitle("Accept Booking")
+            .setMessage("Are you sure you want to accept this booking?")
+            .setPositiveButton("Accept") { _, _ ->
+                acceptBooking()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    override fun onBackPressed() {
+        if (isActiveBooking) {
+            AlertDialog.Builder(this)
+                .setTitle("Active Booking")
+                .setMessage("You have an ongoing booking. You need to complete this booking first.")
+                .setPositiveButton("OK", null)
+                .show()
+        } else {
+            super.onBackPressed()
+        }
     }
 
     override fun onResume() {
@@ -129,3 +361,4 @@ class BookingDetailActivity : AppCompatActivity() {
         map.onPause()
     }
 }
+

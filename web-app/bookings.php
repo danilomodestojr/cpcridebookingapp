@@ -8,34 +8,151 @@ if (!isset($_SESSION['admin_logged_in'])) {
     header('Content-Type: application/json');
 
     // Handle GET request for pending bookings
-    if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['status'])) {
-        $sql = "SELECT b.*, 
-                p.first_name as passenger_name
-                FROM bookings b 
-                LEFT JOIN users p ON b.passenger_id = p.id 
-                WHERE b.status = ?";
-        
-        $stmt = mysqli_prepare($db, $sql);
-        mysqli_stmt_bind_param($stmt, "s", $_GET['status']);
-        mysqli_stmt_execute($stmt);
-        
-        $result = mysqli_stmt_get_result($stmt);
-        $bookings = [];
-        
-        while ($row = mysqli_fetch_assoc($result)) {
-            $bookings[] = $row;
+    if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+        // Check for active booking
+        if (isset($_GET['action']) && $_GET['action'] === 'check_active' && isset($_GET['driver_id'])) {
+            $driver_id = $_GET['driver_id'];
+            
+            $sql = "SELECT b.*, 
+                    p.first_name as passenger_name
+                    FROM bookings b 
+                    LEFT JOIN users p ON b.passenger_id = p.id 
+                    WHERE b.driver_id = ? 
+                    AND b.status = 'accepted'";
+            
+            $stmt = mysqli_prepare($db, $sql);
+            mysqli_stmt_bind_param($stmt, "i", $driver_id);
+            mysqli_stmt_execute($stmt);
+            
+            $result = mysqli_stmt_get_result($stmt);
+            $booking = mysqli_fetch_assoc($result);
+            
+            echo json_encode($booking);
+            exit();
         }
         
-        echo json_encode($bookings);
-        exit();
+        // Get bookings by status
+        if (isset($_GET['status'])) {
+            $sql = "SELECT b.*, 
+                    p.first_name as passenger_name
+                    FROM bookings b 
+                    LEFT JOIN users p ON b.passenger_id = p.id 
+                    WHERE b.status = ?";
+            
+            $stmt = mysqli_prepare($db, $sql);
+            mysqli_stmt_bind_param($stmt, "s", $_GET['status']);
+            mysqli_stmt_execute($stmt);
+            
+            $result = mysqli_stmt_get_result($stmt);
+            $bookings = [];
+            
+            while ($row = mysqli_fetch_assoc($result)) {
+                $bookings[] = $row;
+            }
+            
+            echo json_encode($bookings);
+            exit();
+        }
     }
 
-    // Handle POST request for new bookings
+    // Handle POST requests
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-        error_log("Received booking request: " . print_r($_POST, true));
-		error_log("Received coordinates:");
-		error_log("Pickup: " . $_POST['pickup_latitude'] . ", " . $_POST['pickup_longitude']);
-		error_log("Dropoff: " . $_POST['dropoff_latitude'] . ", " . $_POST['dropoff_longitude']);
+        error_log("Raw POST data: " . file_get_contents('php://input'));
+        error_log("POST array: " . print_r($_POST, true));
+
+        // Handle booking acceptance
+        if (isset($_POST['action']) && $_POST['action'] === 'accept') {
+            error_log("Processing booking acceptance request");
+            
+            if (!isset($_POST['booking_id']) || !isset($_POST['driver_id'])) {
+                echo json_encode([
+                    'success' => false,
+                    'message' => 'Missing required fields'
+                ]);
+                exit();
+            }
+            
+            $booking_id = $_POST['booking_id'];
+            $driver_id = $_POST['driver_id'];
+            
+            // First check if booking is still available
+            $check_sql = "SELECT status FROM bookings WHERE id = ?";
+            $check_stmt = mysqli_prepare($db, $check_sql);
+            mysqli_stmt_bind_param($check_stmt, "i", $booking_id);
+            mysqli_stmt_execute($check_stmt);
+            $result = mysqli_stmt_get_result($check_stmt);
+            $booking = mysqli_fetch_assoc($result);
+            
+            if ($booking && $booking['status'] === 'pending') {
+                // Update booking with driver and change status
+                $update_sql = "UPDATE bookings SET driver_id = ?, status = 'accepted' WHERE id = ? AND status = 'pending'";
+                $update_stmt = mysqli_prepare($db, $update_sql);
+                mysqli_stmt_bind_param($update_stmt, "ii", $driver_id, $booking_id);
+                
+                if (mysqli_stmt_execute($update_stmt)) {
+                    error_log("Successfully accepted booking $booking_id by driver $driver_id");
+                    echo json_encode([
+                        'success' => true,
+                        'message' => 'Booking accepted successfully'
+                    ]);
+                } else {
+                    error_log("SQL Error during accept: " . mysqli_stmt_error($update_stmt));
+                    echo json_encode([
+                        'success' => false,
+                        'message' => 'Failed to update booking'
+                    ]);
+                }
+            } else {
+                echo json_encode([
+                    'success' => false,
+                    'message' => 'Booking no longer available'
+                ]);
+            }
+            exit();
+        }
+
+        // Handle driver marking booking as complete
+        if (isset($_POST['action']) && $_POST['action'] === 'driver_complete') {
+            error_log("Processing driver complete request");
+            
+            if (!isset($_POST['booking_id']) || !isset($_POST['driver_id'])) {
+                echo json_encode([
+                    'success' => false,
+                    'message' => 'Missing required fields'
+                ]);
+                exit();
+            }
+            
+            $booking_id = $_POST['booking_id'];
+            $driver_id = $_POST['driver_id'];
+            
+            // Check if this is their booking and it's in accepted status
+            $check_sql = "SELECT status FROM bookings WHERE id = ? AND driver_id = ? AND status = 'accepted'";
+            $check_stmt = mysqli_prepare($db, $check_sql);
+            mysqli_stmt_bind_param($check_stmt, "ii", $booking_id, $driver_id);
+            mysqli_stmt_execute($check_stmt);
+            $result = mysqli_stmt_get_result($check_stmt);
+            $booking = mysqli_fetch_assoc($result);
+            
+            if ($booking) {
+                echo json_encode([
+                    'success' => true,
+                    'message' => 'Please wait for passenger confirmation'
+                ]);
+            } else {
+                echo json_encode([
+                    'success' => false,
+                    'message' => 'Invalid booking or not authorized'
+                ]);
+            }
+            exit();
+        }
+        
+        // Handle new booking creation
+        error_log("Processing new booking request");
+        error_log("Received coordinates:");
+        error_log("Pickup: " . $_POST['pickup_latitude'] . ", " . $_POST['pickup_longitude']);
+        error_log("Dropoff: " . $_POST['dropoff_latitude'] . ", " . $_POST['dropoff_longitude']);
         
         $sql = "INSERT INTO bookings (
             passenger_id, 
@@ -52,9 +169,10 @@ if (!isset($_SESSION['admin_logged_in'])) {
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')";
 
         $stmt = mysqli_prepare($db, $sql);
-		error_log("Binding values:");
-		error_log("pickup_longitude: " . $_POST['pickup_longitude']);
-		error_log("dropoff_longitude: " . $_POST['dropoff_longitude']);
+        error_log("Binding values:");
+        error_log("pickup_longitude: " . $_POST['pickup_longitude']);
+        error_log("dropoff_longitude: " . $_POST['dropoff_longitude']);
+        
         mysqli_stmt_bind_param($stmt, 
             "isssdddddd",
             $_POST['passenger_id'],
@@ -71,12 +189,16 @@ if (!isset($_SESSION['admin_logged_in'])) {
 
         if (!mysqli_stmt_execute($stmt)) {
             error_log("SQL Error: " . mysqli_stmt_error($stmt));
-            $response = ['success' => false, 'error' => mysqli_stmt_error($stmt)];
+            echo json_encode([
+                'success' => false,
+                'message' => mysqli_stmt_error($stmt)
+            ]);
         } else {
-            $response = ['success' => true];
+            echo json_encode([
+                'success' => true,
+                'message' => 'Booking created successfully'
+            ]);
         }
-        
-        echo json_encode($response);
         exit();
     }
 }

@@ -55,4 +55,5 @@ dependencies {
     implementation("org.osmdroid:osmdroid-android:6.1.16")
     implementation("org.osmdroid:osmdroid-wms:6.1.16")
     implementation("com.squareup.okhttp3:okhttp:4.9.0")
+    implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
 }
