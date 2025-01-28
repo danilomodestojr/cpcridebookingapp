@@ -28,15 +28,22 @@ class PassengerActivity : AppCompatActivity() {
     private lateinit var bookingManager: BookingManager
     private val requestPermissionsCode = 1
     private var currentLocation: GeoPoint? = null
+    private var isCheckingBooking = false
+    private var mapInitialized = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Check for active booking first
+        // Initialize basic layout
+        Configuration.getInstance().load(this, getSharedPreferences("osm_pref", Context.MODE_PRIVATE))
+        setContentView(R.layout.activity_passenger)
+
+        // Check for active booking
         val sharedPreferences = getSharedPreferences("login_pref", Context.MODE_PRIVATE)
         val passengerId = sharedPreferences.getInt("user_id", 0)
 
         if (passengerId > 0) {
+            isCheckingBooking = true
             checkActiveBooking(passengerId)
         } else {
             showError("User ID not found. Please login again.")
@@ -55,26 +62,33 @@ class PassengerActivity : AppCompatActivity() {
 
         ApiClient.api.getPassengerActiveBooking(passengerId).enqueue(object : Callback<Booking?> {
             override fun onResponse(call: Call<Booking?>, response: Response<Booking?>) {
-                loadingDialog.dismiss()
-                if (response.isSuccessful) {
-                    response.body()?.let { booking ->
-                        // Has active booking, go to booking detail view
-                        startBookingDetailActivity(booking)
-                        finish()
-                    } ?: run {
-                        // No active booking, initialize normal passenger view
+                runOnUiThread {
+                    loadingDialog.dismiss()
+                    if (response.isSuccessful) {
+                        response.body()?.let { booking ->
+                            // Has active booking, go to booking detail view
+                            startBookingDetailActivity(booking)
+                            finish()
+                        } ?: run {
+                            // No active booking, initialize normal passenger view
+                            isCheckingBooking = false
+                            initializePassengerView()
+                        }
+                    } else {
+                        showError("Failed to check booking status")
+                        isCheckingBooking = false
                         initializePassengerView()
                     }
-                } else {
-                    showError("Failed to check booking status")
-                    initializePassengerView()
                 }
             }
 
             override fun onFailure(call: Call<Booking?>, t: Throwable) {
-                loadingDialog.dismiss()
-                showError("Network error: ${t.message}")
-                initializePassengerView()
+                runOnUiThread {
+                    loadingDialog.dismiss()
+                    showError("Network error: ${t.message}")
+                    isCheckingBooking = false
+                    initializePassengerView()
+                }
             }
         })
     }
@@ -86,9 +100,6 @@ class PassengerActivity : AppCompatActivity() {
     }
 
     private fun initializePassengerView() {
-        Configuration.getInstance().load(this, getSharedPreferences("osm_pref", Context.MODE_PRIVATE))
-        setContentView(R.layout.activity_passenger)
-
         map = findViewById(R.id.mapView)
         map.setTileSource(TileSourceFactory.MAPNIK)
         map.setMultiTouchControls(true)
@@ -98,6 +109,8 @@ class PassengerActivity : AppCompatActivity() {
         val startPoint = GeoPoint(11.5830094, 122.7530419)
         Log.d("PassengerActivity", "Setting map center: lat=${startPoint.latitude}, lon=${startPoint.longitude}")
         mapController.setCenter(startPoint)
+
+        mapInitialized = true
 
         bookingManager = BookingManager(this, map, currentLocation)
         showLocationSelectionDialog()
@@ -122,12 +135,19 @@ class PassengerActivity : AppCompatActivity() {
 
         findViewById<FloatingActionButton>(R.id.bookRideButton).setOnClickListener {
             bookingManager.showBookingOptions(object : BookingManager.BookingCallback {
-                override fun onBookingSuccess() {
-                    runOnUiThread { showSuccess("Booking saved successfully!") }
+                override fun onBookingSuccess(booking: Booking) {
+                    runOnUiThread {
+                        Log.d("PassengerActivity", "Booking created successfully, ID: ${booking.id}")
+                        startBookingDetailActivity(booking)
+                        finish()
+                    }
                 }
 
                 override fun onBookingError(message: String) {
-                    runOnUiThread { showError(message) }
+                    runOnUiThread {
+                        Log.e("PassengerActivity", "Booking error: $message")
+                        showError(message)
+                    }
                 }
             })
         }
@@ -146,7 +166,6 @@ class PassengerActivity : AppCompatActivity() {
                     override fun onSingleTapConfirmed(e: MotionEvent?, mapView: MapView?): Boolean {
                         e?.let {
                             val tappedPoint = mapView?.projection?.fromPixels(e.x.toInt(), e.y.toInt())
-
                             Log.d("PassengerActivity", "Tapped coords: lat=${tappedPoint?.latitude}, lon=${tappedPoint?.longitude}")
 
                             tappedPoint?.let { point ->
@@ -183,29 +202,37 @@ class PassengerActivity : AppCompatActivity() {
     }
 
     private fun showSuccess(message: String) {
-        AlertDialog.Builder(this)
-            .setTitle("Success")
-            .setMessage(message)
-            .setPositiveButton("OK", null)
-            .show()
+        runOnUiThread {
+            AlertDialog.Builder(this)
+                .setTitle("Success")
+                .setMessage(message)
+                .setPositiveButton("OK", null)
+                .show()
+        }
     }
 
     private fun showError(message: String) {
-        AlertDialog.Builder(this)
-            .setTitle("Error")
-            .setMessage(message)
-            .setPositiveButton("OK", null)
-            .show()
+        runOnUiThread {
+            AlertDialog.Builder(this)
+                .setTitle("Error")
+                .setMessage(message)
+                .setPositiveButton("OK", null)
+                .show()
+        }
     }
 
     override fun onResume() {
         super.onResume()
-        map.onResume()
+        if (mapInitialized && !isCheckingBooking) {
+            map.onResume()
+        }
     }
 
     override fun onPause() {
         super.onPause()
-        map.onPause()
+        if (mapInitialized && !isCheckingBooking) {
+            map.onPause()
+        }
     }
 
     private fun requestPermissionsIfNecessary(permissions: Array<String>) {

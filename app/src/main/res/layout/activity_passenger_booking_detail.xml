@@ -44,28 +44,33 @@
             android:id="@+id/driverNameText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Driver: "/>
+            android:text="Driver: Waiting for driver..."
+            android:textSize="16sp"
+            android:paddingVertical="4dp"/>
 
         <TextView
             android:id="@+id/pickupLocationText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="Pickup: "/>
+            android:text="Pickup Location: "
+            android:textSize="16sp"
+            android:paddingVertical="4dp"/>
 
         <TextView
             android:id="@+id/dropoffLocationText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="Dropoff: "/>
+            android:text="Dropoff Location: "
+            android:textSize="16sp"
+            android:paddingVertical="4dp"/>
 
         <TextView
             android:id="@+id/fareText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="Fare: "/>
+            android:text="Fare: "
+            android:textSize="16sp"
+            android:paddingVertical="4dp"/>
     </LinearLayout>
 
     <Button
@@ -75,6 +80,17 @@
         android:text="Confirm Completion"
         android:layout_margin="16dp"
         android:backgroundTint="@color/accent_blue"
+        android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="parent"/>
+
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/refreshButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_margin="16dp"
+        android:src="@android:drawable/ic_popup_sync"
+        android:contentDescription="Refresh booking status"
+        app:layout_constraintBottom_toTopOf="@id/bookingInfo"
+        app:layout_constraintStart_toStartOf="parent"/>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

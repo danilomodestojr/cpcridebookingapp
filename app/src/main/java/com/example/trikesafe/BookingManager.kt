@@ -2,28 +2,28 @@ import android.content.Context
 import android.util.Log
 import android.view.MotionEvent
 import androidx.appcompat.app.AlertDialog
-import okhttp3.*
+import com.example.trikesafe.ApiClient
+import com.example.trikesafe.Booking
+import com.example.trikesafe.CreateBookingResponse
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Overlay
-import java.io.IOException
+import retrofit2.Call
+import retrofit2.Callback
+import retrofit2.Response
 
 class BookingManager(
     private val context: Context,
     private val map: MapView,
     private var currentLocation: GeoPoint?
 ) {
-
-    private val client = OkHttpClient()
-    private val url = "http://192.168.254.108:80/trikesafe-admin/bookings.php"
-
     fun updateCurrentLocation(location: GeoPoint?) {
         currentLocation = location
     }
 
     interface BookingCallback {
-        fun onBookingSuccess()
+        fun onBookingSuccess(booking: Booking)
         fun onBookingError(message: String)
     }
 
@@ -72,11 +72,9 @@ class BookingManager(
                         e?.let {
                             val tappedPoint = mapView?.projection?.fromPixels(e.x.toInt(), e.y.toInt())
 
-                            // Log raw tapped coordinates
                             Log.d("BookingManager", "Tapped coords: lat=${tappedPoint?.latitude}, lon=${tappedPoint?.longitude}")
 
                             tappedPoint?.let { point ->
-                                // Use exact coordinates without modification
                                 val destPoint = GeoPoint(point.latitude, point.longitude)
                                 Log.d("BookingManager", "Creating destination GeoPoint: lat=${destPoint.latitude}, lon=${destPoint.longitude}")
 
@@ -144,40 +142,44 @@ class BookingManager(
         val sharedPreferences = context.getSharedPreferences("login_pref", Context.MODE_PRIVATE)
         val passengerId = sharedPreferences.getInt("user_id", 0)
 
-        // Log coordinates before creating FormBody
-        Log.d("BookingManager", "Saving booking: pickup_lat=${currentLocation?.latitude}, pickup_long=${currentLocation?.longitude}")
-        Log.d("BookingManager", "Saving booking: dropoff_lat=${destination.latitude}, dropoff_long=${destination.longitude}")
+        Log.d("BookingManager", "Creating booking with passengerId: $passengerId")
+        Log.d("BookingManager", "Pickup: ${currentLocation?.latitude}, ${currentLocation?.longitude}")
+        Log.d("BookingManager", "Dropoff: ${destination.latitude}, ${destination.longitude}")
 
-        val formBody = FormBody.Builder()
-            .add("passenger_id", passengerId.toString())
-            .add("booking_type", "regular")
-            .add("pickup_location", "Current Location")
-            .add("dropoff_location", "Destination")
-            .add("pickup_latitude", currentLocation?.latitude?.toString() ?: "0.0")
-            .add("pickup_longitude", currentLocation?.longitude?.toString() ?: "0.0")
-            .add("dropoff_latitude", destination.latitude.toString())
-            .add("dropoff_longitude", destination.longitude.toString())
-            .add("distance_km", distance.toString())
-            .add("total_fare", fare.toString())
-            .build()
-
-        // Log the actual form data being sent
-        Log.d("BookingManager", "Form data: ${formBody.toString()}")
-
-        val request = Request.Builder()
-            .url(url)
-            .post(formBody)
-            .build()
-
-        client.newCall(request).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) {
-                callback.onBookingError("Failed to save booking")
+        ApiClient.api.createBooking(
+            passengerId = passengerId,
+            bookingType = "regular",
+            pickupLocation = "Current Location",
+            dropoffLocation = "Destination",
+            pickupLatitude = currentLocation?.latitude ?: 0.0,
+            pickupLongitude = currentLocation?.longitude ?: 0.0,
+            dropoffLatitude = destination.latitude,
+            dropoffLongitude = destination.longitude,
+            distanceKm = distance,
+            totalFare = fare
+        ).enqueue(object : Callback<CreateBookingResponse> {
+            override fun onResponse(
+                call: Call<CreateBookingResponse>,
+                response: Response<CreateBookingResponse>
+            ) {
+                if (response.isSuccessful && response.body()?.success == true) {
+                    response.body()?.booking?.let { booking ->
+                        Log.d("BookingManager", "Booking created successfully: ${booking.id}")
+                        callback.onBookingSuccess(booking)
+                    } ?: run {
+                        Log.e("BookingManager", "Booking object is null in response")
+                        callback.onBookingError("Booking created but details not returned")
+                    }
+                } else {
+                    val errorMsg = response.body()?.message ?: "Failed to create booking"
+                    Log.e("BookingManager", "API Error: $errorMsg")
+                    callback.onBookingError(errorMsg)
+                }
             }
 
-            override fun onResponse(call: Call, response: Response) {
-                val responseBody = response.body?.string()
-                Log.d("BookingManager", "Response: $responseBody")
-                callback.onBookingSuccess()
+            override fun onFailure(call: Call<CreateBookingResponse>, t: Throwable) {
+                Log.e("BookingManager", "Network error: ${t.message}", t)
+                callback.onBookingError("Network error: ${t.message}")
             }
         })
     }

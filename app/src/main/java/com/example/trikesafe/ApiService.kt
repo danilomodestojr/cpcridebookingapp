@@ -57,7 +57,7 @@ interface ApiService {
         @Field("passenger_id") passengerId: Int
     ): Call<ApiResponse>
 
-    // Create new booking endpoint (if not already defined elsewhere)
+    // Create new booking endpoint
     @FormUrlEncoded
     @POST("bookings.php")
     fun createBooking(
@@ -71,7 +71,7 @@ interface ApiService {
         @Field("dropoff_longitude") dropoffLongitude: Double,
         @Field("distance_km") distanceKm: Double,
         @Field("total_fare") totalFare: Double
-    ): Call<ApiResponse>
+    ): Call<CreateBookingResponse>
 }
 
 // Response data classes
@@ -80,6 +80,12 @@ data class ApiResponse(
     val message: String,
     val userId: Int?,
     val role: String? = null
+)
+
+data class CreateBookingResponse(
+    val success: Boolean,
+    val message: String,
+    val booking: Booking?
 )
 
 data class LoginRequest(

@@ -97,10 +97,19 @@ class BookingDetailActivity : AppCompatActivity() {
     }
 
     private fun displayBookingDetails(booking: Booking) {
-        findViewById<TextView>(R.id.pickupLocationText).text =
-            "Pickup Location: ${booking.pickup_location}"
-        findViewById<TextView>(R.id.dropoffLocationText).text =
-            "Dropoff Location: ${booking.dropoff_location}"
+        // Show different information based on whether it's an active booking
+        if (isActiveBooking) {
+            findViewById<TextView>(R.id.pickupLocationText).text =
+                "Passenger: ${booking.passenger_name ?: "Not available"}"
+            findViewById<TextView>(R.id.dropoffLocationText).text =
+                "Contact: ${booking.passenger_contact ?: "Not available"}"
+        } else {
+            findViewById<TextView>(R.id.pickupLocationText).text =
+                "Pickup Location: ${booking.pickup_location}"
+            findViewById<TextView>(R.id.dropoffLocationText).text =
+                "Dropoff Location: ${booking.dropoff_location}"
+        }
+
         findViewById<TextView>(R.id.distanceText).text =
             "Distance: ${String.format("%.2f", booking.distance_km)} km"
         findViewById<TextView>(R.id.fareText).text =
@@ -285,7 +294,7 @@ class BookingDetailActivity : AppCompatActivity() {
             return
         }
 
-        booking?.let { booking ->
+        booking?.let { currentBooking ->
             // Show loading indicator
             val loadingDialog = AlertDialog.Builder(this)
                 .setMessage("Processing your request...")
@@ -295,14 +304,40 @@ class BookingDetailActivity : AppCompatActivity() {
 
             ApiClient.api.acceptBooking(
                 action = "accept",
-                bookingId = booking.id,
+                bookingId = currentBooking.id,
                 driverId = driverId
             ).enqueue(object : Callback<ApiResponse> {
                 override fun onResponse(call: Call<ApiResponse>, response: Response<ApiResponse>) {
-                    loadingDialog.dismiss()
                     if (response.isSuccessful && response.body()?.success == true) {
-                        showSuccessAndFinish()
+                        // Get the updated booking after acceptance
+                        ApiClient.api.getDriverActiveBooking(driverId).enqueue(object : Callback<Booking?> {
+                            override fun onResponse(call: Call<Booking?>, response: Response<Booking?>) {
+                                loadingDialog.dismiss()
+                                if (response.isSuccessful && response.body() != null) {
+                                    val updatedBooking = response.body()!!
+                                    isActiveBooking = true
+                                    runOnUiThread {
+                                        displayBookingDetails(updatedBooking)
+                                        setupButtons()
+                                        // Show success message
+                                        AlertDialog.Builder(this@BookingDetailActivity)
+                                            .setTitle("Success")
+                                            .setMessage("You have accepted this booking. The passenger will be notified.")
+                                            .setPositiveButton("OK", null)
+                                            .show()
+                                    }
+                                } else {
+                                    showSuccessAndFinish()
+                                }
+                            }
+
+                            override fun onFailure(call: Call<Booking?>, t: Throwable) {
+                                loadingDialog.dismiss()
+                                showSuccessAndFinish()
+                            }
+                        })
                     } else {
+                        loadingDialog.dismiss()
                         showError("Failed to accept booking. It might have been taken by another driver.")
                     }
                 }
@@ -321,7 +356,11 @@ class BookingDetailActivity : AppCompatActivity() {
             .setTitle("Success")
             .setMessage("You have accepted this booking. The passenger will be notified.")
             .setPositiveButton("OK") { _, _ ->
-                setResult(RESULT_OK)
+                // Instead of just finishing, restart this activity with is_active=true
+                val intent = Intent(this, BookingDetailActivity::class.java)
+                intent.putExtra("booking", booking)
+                intent.putExtra("is_active", true)
+                startActivity(intent)
                 finish()
             }
             .setCancelable(false)
