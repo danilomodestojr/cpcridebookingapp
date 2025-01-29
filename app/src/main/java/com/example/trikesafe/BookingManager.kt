@@ -14,6 +14,8 @@ import retrofit2.Callback
 import retrofit2.Response
 import com.example.trikesafe.FareSettings
 import com.example.trikesafe.FareSettingsResponse
+import com.example.trikesafe.TourPackage
+import com.example.trikesafe.TourPackagesResponse
 
 class BookingManager(
     private val context: Context,
@@ -73,11 +75,12 @@ class BookingManager(
             .setItems(arrayOf("Point-to-Point Ride", "City Tour Package")) { _, which ->
                 when (which) {
                     0 -> handlePointToPointBooking(callback)
-                    1 -> handleCityTourBooking()
+                    1 -> handleCityTourBooking(callback)  // ✅ Fix: Pass callback correctly
                 }
             }
             .show()
     }
+
 
     private fun addMarker(point: GeoPoint) {
         val marker = Marker(map)
@@ -125,8 +128,147 @@ class BookingManager(
             .show()
     }
 
-    private fun handleCityTourBooking() {
-        // Implementation for city tour
+    private fun handleCityTourBooking(callback: BookingCallback) {
+        if (currentLocation == null) {
+            showPickupLocationDialog()
+            return
+        }
+
+        // Show loading dialog
+        val loadingDialog = AlertDialog.Builder(context)
+            .setMessage("Loading tour packages...")
+            .setCancelable(false)
+            .create()
+        loadingDialog.show()
+
+        // Fetch tour packages
+        ApiClient.getApi(context).getTourPackages().enqueue(object : Callback<TourPackagesResponse> {
+            override fun onResponse(
+                call: Call<TourPackagesResponse>,
+                response: Response<TourPackagesResponse>
+            ) {
+                loadingDialog.dismiss()
+                if (response.isSuccessful) {
+                    val tourResponse = response.body()
+                    if (tourResponse?.success == true) {
+                        tourResponse.packages?.let { packages ->
+                            showTourPackagesList(packages, callback)
+                        } ?: run {
+                            showError("No tour packages available")
+                        }
+                    } else {
+                        showError("Failed to load tour packages")
+                    }
+                } else {
+                    Log.e("BookingManager", "Error response code: ${response.code()}")
+                    Log.e("BookingManager", "Error body: ${response.errorBody()?.string()}")
+                    showError("Failed to load tour packages")
+                }
+            }
+
+            override fun onFailure(call: Call<TourPackagesResponse>, t: Throwable) {
+                loadingDialog.dismiss()
+                showError("Network error: ${t.message}")
+            }
+        })
+    }
+
+
+    private fun showTourPackagesList(packages: List<TourPackage>, callback: BookingCallback) {
+        if (packages.isEmpty()) {
+            showError("No tour packages available")
+            return
+        }
+
+        // Create package names array for dialog
+        val packageNames = packages.map { it.name }.toTypedArray()
+
+        AlertDialog.Builder(context)
+            .setTitle("Available Tour Packages")
+            .setItems(packageNames) { _, which ->
+                val selectedPackage = packages[which]
+                showTourPackageDetails(selectedPackage, callback)  // ✅ Fix: Pass callback correctly
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+
+    private fun showTourPackageDetails(tourPackage: TourPackage, callback: BookingCallback) {
+        val durationHours = tourPackage.duration_minutes / 60.0
+        val message = """
+        Package: ${tourPackage.name}
+        
+        Description: ${tourPackage.description}
+        
+        Places to Visit: ${tourPackage.route_points}
+        
+        Duration: ${String.format("%.1f", durationHours)} hours
+        Price: ₱${String.format("%.2f", tourPackage.price)}
+        
+        Would you like to book this tour package?
+    """.trimIndent()
+
+        AlertDialog.Builder(context)
+            .setTitle("Tour Package Details")
+            .setMessage(message)
+            .setPositiveButton("Book Now") { _, _ ->
+                createTourBooking(tourPackage, callback)  // ✅ Fix: Pass callback correctly
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+
+    private fun createTourBooking(tourPackage: TourPackage, callback: BookingCallback) {
+        val sharedPreferences = context.getSharedPreferences("login_pref", Context.MODE_PRIVATE)
+        val passengerId = sharedPreferences.getInt("user_id", 0)
+
+        ApiClient.getApi(context).createBooking(
+            passengerId = passengerId,
+            bookingType = "tour",
+            pickupLocation = "Tour Pickup Point",
+            dropoffLocation = tourPackage.route_points,
+            pickupLatitude = currentLocation?.latitude ?: 0.0,
+            pickupLongitude = currentLocation?.longitude ?: 0.0,
+            dropoffLatitude = 0.0,  // Not applicable for tours
+            dropoffLongitude = 0.0, // Not applicable for tours
+            distanceKm = 0.0,       // Not applicable for tours
+            totalFare = tourPackage.price
+        ).enqueue(object : Callback<CreateBookingResponse> {
+            override fun onResponse(
+                call: Call<CreateBookingResponse>,
+                response: Response<CreateBookingResponse>
+            ) {
+                if (response.isSuccessful && response.body()?.success == true) {
+                    response.body()?.booking?.let { booking ->
+                        Log.d("BookingManager", "Tour booking created successfully: ${booking.id}")
+                        callback.onBookingSuccess(booking)  // ✅ Fix: Now callback is recognized
+                    } ?: run {
+                        Log.e("BookingManager", "Booking object is null in response")
+                        callback.onBookingError("Booking created but details not returned")  // ✅ Fix
+                    }
+                } else {
+                    val errorMsg = response.body()?.message ?: "Failed to create booking"
+                    Log.e("BookingManager", "API Error: $errorMsg")
+                    callback.onBookingError(errorMsg)  // ✅ Fix
+                }
+            }
+
+            override fun onFailure(call: Call<CreateBookingResponse>, t: Throwable) {
+                Log.e("BookingManager", "Network error: ${t.message}", t)
+                callback.onBookingError("Network error: ${t.message}")  // ✅ Fix
+            }
+        })
+    }
+
+
+    private fun showError(message: String) {
+        AlertDialog.Builder(context)
+            .setTitle("Error")
+            .setMessage(message)
+            .setPositiveButton("OK", null)
+            .show()
     }
 
     private fun addDestinationMarker(point: GeoPoint) {

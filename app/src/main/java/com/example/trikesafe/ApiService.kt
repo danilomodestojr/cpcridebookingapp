@@ -22,6 +22,9 @@ interface ApiService {
     @GET("bookings.php")
     fun getFareSettings(@Query("action") action: String = "get_fare_settings"): Call<FareSettingsResponse>
 
+    @GET("bookings.php")
+    fun getTourPackages(@Query("action") action: String = "get_tour_packages"): Call<TourPackagesResponse>
+
     // Driver-related endpoints
     @FormUrlEncoded
     @POST("bookings.php")
