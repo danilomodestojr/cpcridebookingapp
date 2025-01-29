@@ -246,7 +246,7 @@ class BookingDetailActivity : AppCompatActivity() {
                 .create()
             loadingDialog.show()
 
-            ApiClient.api.markBookingComplete(
+            ApiClient.getApi(this).markBookingComplete(
                 action = "driver_complete",
                 bookingId = booking.id,
                 driverId = driverId
@@ -321,7 +321,7 @@ class BookingDetailActivity : AppCompatActivity() {
                 .create()
             loadingDialog.show()
 
-            ApiClient.api.acceptBooking(
+            ApiClient.getApi(this).acceptBooking(
                 action = "accept",
                 bookingId = currentBooking.id,
                 driverId = driverId
@@ -329,7 +329,7 @@ class BookingDetailActivity : AppCompatActivity() {
                 override fun onResponse(call: Call<ApiResponse>, response: Response<ApiResponse>) {
                     if (response.isSuccessful && response.body()?.success == true) {
                         // Get the updated booking after acceptance
-                        ApiClient.api.getDriverActiveBooking(driverId).enqueue(object : Callback<Booking?> {
+                        ApiClient.getApi(this@BookingDetailActivity).getDriverActiveBooking(driverId).enqueue(object : Callback<Booking?> {
                             override fun onResponse(call: Call<Booking?>, response: Response<Booking?>) {
                                 loadingDialog.dismiss()
                                 if (response.isSuccessful && response.body() != null) {

@@ -27,7 +27,12 @@ class PassengerBookingDetailActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Initialize ApiClient
+        ApiClient.initialize(this)
+
         setContentView(R.layout.activity_passenger_booking_detail)
+
 
         // Setup logout button
         findViewById<Button>(R.id.logoutButton).setOnClickListener {
@@ -168,7 +173,7 @@ class PassengerBookingDetailActivity : AppCompatActivity() {
                 .create()
             loadingDialog.show()
 
-            ApiClient.api.confirmBookingComplete(
+            ApiClient.getApi(this).confirmBookingComplete(
                 action = "passenger_confirm",
                 bookingId = booking.id,
                 passengerId = passengerId
@@ -305,7 +310,7 @@ class PassengerBookingDetailActivity : AppCompatActivity() {
             .create()
         loadingDialog.show()
 
-        ApiClient.api.getPassengerActiveBooking(passengerId).enqueue(object : Callback<Booking?> {
+        ApiClient.getApi(this).getPassengerActiveBooking(passengerId).enqueue(object : Callback<Booking?> {
             override fun onResponse(call: Call<Booking?>, response: Response<Booking?>) {
                 runOnUiThread {
                     loadingDialog.dismiss()

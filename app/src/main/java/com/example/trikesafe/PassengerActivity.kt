@@ -34,6 +34,9 @@ class PassengerActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Initialize ApiClient
+        ApiClient.initialize(this)
+
         // Initialize basic layout
         Configuration.getInstance().load(this, getSharedPreferences("osm_pref", Context.MODE_PRIVATE))
         setContentView(R.layout.activity_passenger)
@@ -60,7 +63,7 @@ class PassengerActivity : AppCompatActivity() {
             .create()
         loadingDialog.show()
 
-        ApiClient.api.getPassengerActiveBooking(passengerId).enqueue(object : Callback<Booking?> {
+        ApiClient.getApi(this).getPassengerActiveBooking(passengerId).enqueue(object : Callback<Booking?> {
             override fun onResponse(call: Call<Booking?>, response: Response<Booking?>) {
                 runOnUiThread {
                     loadingDialog.dismiss()

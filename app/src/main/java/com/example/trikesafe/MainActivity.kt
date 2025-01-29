@@ -1,5 +1,6 @@
 package com.example.trikesafe
 
+
 import android.content.Context
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
@@ -8,6 +9,7 @@ import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
 import android.content.Intent
+import androidx.appcompat.app.AlertDialog
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 
@@ -40,6 +42,10 @@ class MainActivity : AppCompatActivity() {
         val emailInput = findViewById<EditText>(R.id.emailInput)
         val passwordInput = findViewById<EditText>(R.id.passwordInput)
         val registerLink = findViewById<TextView>(R.id.registerLink)
+        val serverSettingsButton = findViewById<Button>(R.id.serverSettingsButton)
+
+        // Initialize ApiClient with context
+        ApiClient.initialize(this)
 
         loginButton.setOnClickListener {
             val username = emailInput.text.toString()
@@ -56,21 +62,37 @@ class MainActivity : AppCompatActivity() {
         registerLink.setOnClickListener {
             startActivity(Intent(this, RegisterActivity::class.java))
         }
+
+        serverSettingsButton.setOnClickListener {
+            startActivity(Intent(this, ServerSettingsActivity::class.java))
+        }
     }
 
     private fun loginUser(username: String, password: String) {
         lifecycleScope.launch {
             try {
-                // Make sure your ApiClient.api.loginUser returns ApiResponse with userId
-                val response = ApiClient.api.loginUser(LoginRequest(username, password))
+                val response = ApiClient.getApi(this@MainActivity).loginUser(LoginRequest(username, password))
                 if (response.isSuccessful) {
                     response.body()?.let { handleLoginResponse(it) }
                 } else {
-                    Toast.makeText(this@MainActivity, "Login failed", Toast.LENGTH_SHORT).show()
+                    showConnectionError()
                 }
             } catch (e: Exception) {
-                Toast.makeText(this@MainActivity, "Network error", Toast.LENGTH_SHORT).show()
+                showConnectionError()
             }
+        }
+    }
+
+    private fun showConnectionError() {
+        runOnUiThread {
+            AlertDialog.Builder(this)
+                .setTitle("Connection Error")
+                .setMessage("Could not connect to server. Would you like to check server settings?")
+                .setPositiveButton("Settings") { _, _ ->
+                    startActivity(Intent(this, ServerSettingsActivity::class.java))
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
         }
     }
 

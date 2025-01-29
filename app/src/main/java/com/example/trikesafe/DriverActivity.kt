@@ -22,6 +22,9 @@ class DriverActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Initialize ApiClient
+        ApiClient.initialize(this)
+
         // Check for active booking first
         val sharedPreferences = getSharedPreferences("login_pref", Context.MODE_PRIVATE)
         val driverId = sharedPreferences.getInt("user_id", 0)
@@ -35,7 +38,7 @@ class DriverActivity : AppCompatActivity() {
             .create()
         loadingDialog.show()
 
-        ApiClient.api.getDriverActiveBooking(driverId).enqueue(object : Callback<Booking?> {
+        ApiClient.getApi(this).getDriverActiveBooking(driverId).enqueue(object : Callback<Booking?> {
             override fun onResponse(call: Call<Booking?>, response: Response<Booking?>) {
                 loadingDialog.dismiss()
                 if (response.isSuccessful) {
@@ -109,7 +112,7 @@ class DriverActivity : AppCompatActivity() {
     }
 
     private fun loadPendingBookings() {
-        ApiClient.api.getPendingBookings().enqueue(object : Callback<List<Booking>> {
+        ApiClient.getApi(this).getPendingBookings().enqueue(object : Callback<List<Booking>> {
             override fun onResponse(call: Call<List<Booking>>, response: Response<List<Booking>>) {
                 // Stop the refresh animation
                 swipeRefreshLayout.isRefreshing = false

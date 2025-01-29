@@ -18,6 +18,9 @@ class BookingManager(
     private val map: MapView,
     private var currentLocation: GeoPoint?
 ) {
+    init {
+        ApiClient.initialize(context)
+    }
     fun updateCurrentLocation(location: GeoPoint?) {
         currentLocation = location
     }
@@ -146,7 +149,7 @@ class BookingManager(
         Log.d("BookingManager", "Pickup: ${currentLocation?.latitude}, ${currentLocation?.longitude}")
         Log.d("BookingManager", "Dropoff: ${destination.latitude}, ${destination.longitude}")
 
-        ApiClient.api.createBooking(
+        ApiClient.getApi(context).createBooking(
             passengerId = passengerId,
             bookingType = "regular",
             pickupLocation = "Current Location",

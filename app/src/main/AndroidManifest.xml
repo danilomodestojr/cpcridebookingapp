@@ -41,6 +41,12 @@
         <activity
             android:name=".PassengerBookingDetailActivity"
             android:exported="false"/>
+
+        <activity
+            android:name=".ServerSettingsActivity"
+            android:exported="false"
+            android:label="Server Settings"/>
+
     </application>
 
 </manifest>

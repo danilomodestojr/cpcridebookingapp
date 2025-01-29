@@ -29,6 +29,9 @@ class RegisterActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_register)
 
+        // Initialize ApiClient
+        ApiClient.initialize(this)
+
         // These must match IDs from the above XML
         usernameInput = findViewById(R.id.usernameInput)
         nameInput = findViewById(R.id.nameInput)
@@ -73,7 +76,7 @@ class RegisterActivity : AppCompatActivity() {
 
                 CoroutineScope(Dispatchers.Main).launch {
                     try {
-                        val response = ApiClient.api.registerUser(userData)
+                        val response = ApiClient.getApi(this@RegisterActivity).registerUser(userData)
                         if (response.isSuccessful) {
                             Toast.makeText(this@RegisterActivity, "Registration successful", Toast.LENGTH_SHORT).show()
                             finish()

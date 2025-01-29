@@ -1,16 +1,32 @@
 package com.example.trikesafe
 
+import android.content.Context
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 
 object ApiClient {
-    //private const val BASE_URL = "http://10.0.2.2/trikesafe-admin/" // localhost for Android emulator
-    private const val BASE_URL = "http://192.168.254.108:80/trikesafe-admin/" // localhost for PC Xammp
+    private var retrofit: Retrofit? = null
+    private var api: ApiService? = null
 
-    private val retrofit = Retrofit.Builder()
-        .baseUrl(BASE_URL)
-        .addConverterFactory(GsonConverterFactory.create())
-        .build()
+    fun initialize(context: Context) {
+        val sharedPreferences = context.getSharedPreferences("server_config", Context.MODE_PRIVATE)
+        val ipAddress = sharedPreferences.getString("ip_address", "192.168.254.108")
+        val port = sharedPreferences.getString("port", "80")
 
-    val api: ApiService = retrofit.create(ApiService::class.java)
+        val baseUrl = "http://$ipAddress:$port/trikesafe-admin/"
+
+        retrofit = Retrofit.Builder()
+            .baseUrl(baseUrl)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+
+        api = retrofit?.create(ApiService::class.java)
+    }
+
+    fun getApi(context: Context): ApiService {
+        if (api == null) {
+            initialize(context)
+        }
+        return api ?: throw IllegalStateException("API not initialized")
+    }
 }
