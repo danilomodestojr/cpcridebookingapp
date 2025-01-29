@@ -57,6 +57,25 @@ if (!isset($_SESSION['admin_logged_in'])) {
             echo json_encode($booking);
             exit();
         }
+		
+		 // Add the new fare settings endpoint here, before the "Get bookings by status" section
+    if (isset($_GET['action']) && $_GET['action'] === 'get_fare_settings') {
+        $sql = "SELECT base_fare, additional_per_km, minimum_distance FROM fare_settings LIMIT 1";
+        $result = mysqli_query($db, $sql);
+        
+        if ($settings = mysqli_fetch_assoc($result)) {
+            echo json_encode([
+                'success' => true,
+                'settings' => $settings
+            ]);
+        } else {
+            echo json_encode([
+                'success' => false,
+                'message' => 'Failed to get fare settings'
+            ]);
+        }
+        exit();
+    }
         
         // Get bookings by status
         if (isset($_GET['status'])) {
@@ -88,55 +107,74 @@ if (!isset($_SESSION['admin_logged_in'])) {
         error_log("POST array: " . print_r($_POST, true));
 
         // Handle booking acceptance
-        if (isset($_POST['action']) && $_POST['action'] === 'accept') {
-            error_log("Processing booking acceptance request");
+if (isset($_POST['action']) && $_POST['action'] === 'accept') {
+    error_log("Processing booking acceptance request");
+    
+    if (!isset($_POST['booking_id']) || !isset($_POST['driver_id'])) {
+        echo json_encode([
+            'success' => false,
+            'message' => 'Missing required fields'
+        ]);
+        exit();
+    }
+    
+    $booking_id = $_POST['booking_id'];
+    $driver_id = $_POST['driver_id'];
+    
+    // Start transaction
+    mysqli_begin_transaction($db);
+    
+    try {
+        // First check if booking is still available using FOR UPDATE to lock the row
+        $check_sql = "SELECT status FROM bookings WHERE id = ? FOR UPDATE";
+        $check_stmt = mysqli_prepare($db, $check_sql);
+        mysqli_stmt_bind_param($check_stmt, "i", $booking_id);
+        mysqli_stmt_execute($check_stmt);
+        $result = mysqli_stmt_get_result($check_stmt);
+        $booking = mysqli_fetch_assoc($result);
+        
+        if ($booking && $booking['status'] === 'pending') {
+            // Update booking with driver and change status
+            $update_sql = "UPDATE bookings SET driver_id = ?, status = 'accepted' WHERE id = ? AND status = 'pending'";
+            $update_stmt = mysqli_prepare($db, $update_sql);
+            mysqli_stmt_bind_param($update_stmt, "ii", $driver_id, $booking_id);
             
-            if (!isset($_POST['booking_id']) || !isset($_POST['driver_id'])) {
+            if (mysqli_stmt_execute($update_stmt)) {
+                // Commit the transaction
+                mysqli_commit($db);
+                error_log("Successfully accepted booking $booking_id by driver $driver_id");
                 echo json_encode([
-                    'success' => false,
-                    'message' => 'Missing required fields'
+                    'success' => true,
+                    'message' => 'Booking accepted successfully'
                 ]);
-                exit();
-            }
-            
-            $booking_id = $_POST['booking_id'];
-            $driver_id = $_POST['driver_id'];
-            
-            // First check if booking is still available
-            $check_sql = "SELECT status FROM bookings WHERE id = ?";
-            $check_stmt = mysqli_prepare($db, $check_sql);
-            mysqli_stmt_bind_param($check_stmt, "i", $booking_id);
-            mysqli_stmt_execute($check_stmt);
-            $result = mysqli_stmt_get_result($check_stmt);
-            $booking = mysqli_fetch_assoc($result);
-            
-            if ($booking && $booking['status'] === 'pending') {
-                // Update booking with driver and change status
-                $update_sql = "UPDATE bookings SET driver_id = ?, status = 'accepted' WHERE id = ? AND status = 'pending'";
-                $update_stmt = mysqli_prepare($db, $update_sql);
-                mysqli_stmt_bind_param($update_stmt, "ii", $driver_id, $booking_id);
-                
-                if (mysqli_stmt_execute($update_stmt)) {
-                    error_log("Successfully accepted booking $booking_id by driver $driver_id");
-                    echo json_encode([
-                        'success' => true,
-                        'message' => 'Booking accepted successfully'
-                    ]);
-                } else {
-                    error_log("SQL Error during accept: " . mysqli_stmt_error($update_stmt));
-                    echo json_encode([
-                        'success' => false,
-                        'message' => 'Failed to update booking'
-                    ]);
-                }
             } else {
+                // Rollback on update failure
+                mysqli_rollback($db);
+                error_log("SQL Error during accept: " . mysqli_stmt_error($update_stmt));
                 echo json_encode([
                     'success' => false,
-                    'message' => 'Booking no longer available'
+                    'message' => 'Failed to update booking'
                 ]);
             }
-            exit();
+        } else {
+            // Rollback if booking not available
+            mysqli_rollback($db);
+            echo json_encode([
+                'success' => false,
+                'message' => 'Booking no longer available'
+            ]);
         }
+    } catch (Exception $e) {
+        // Rollback on any error
+        mysqli_rollback($db);
+        error_log("Error in booking acceptance: " . $e->getMessage());
+        echo json_encode([
+            'success' => false,
+            'message' => 'An error occurred while processing your request'
+        ]);
+    }
+    exit();
+}
 
         // Handle driver marking booking as complete
 if (isset($_POST['action']) && $_POST['action'] === 'driver_complete') {

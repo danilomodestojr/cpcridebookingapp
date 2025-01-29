@@ -18,7 +18,13 @@
                 <li class="nav-item">
                     <a class="nav-link" href="tour_packages.php">Tour Packages</a>
                 </li>
+				
             </ul>
+			<ul class="navbar-nav me-right">
+			<li class="nav-item">
+    <a class="nav-link" href="fare_settings.php">Fare Settings</a>
+</li>
+</ul>
             <form class="d-flex" action="logout.php" method="POST">
                 <button class="btn btn-light" type="submit">Logout</button>
             </form>
