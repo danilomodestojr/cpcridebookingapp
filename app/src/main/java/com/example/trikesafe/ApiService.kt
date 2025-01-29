@@ -73,7 +73,8 @@ interface ApiService {
         @Field("dropoff_latitude") dropoffLatitude: Double,
         @Field("dropoff_longitude") dropoffLongitude: Double,
         @Field("distance_km") distanceKm: Double,
-        @Field("total_fare") totalFare: Double
+        @Field("total_fare") totalFare: Double,
+        @Field("tour_package_id") tourPackageId: Int? = null
     ): Call<CreateBookingResponse>
 }
 

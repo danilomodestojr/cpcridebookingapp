@@ -15,9 +15,12 @@ if (!isset($_SESSION['admin_logged_in'])) {
             
             $sql = "SELECT b.*, 
         p.first_name AS passenger_name,
-        p.contact_number AS passenger_contact
+        p.contact_number AS passenger_contact,
+        tp.name as tour_name,  /* Add this */
+        tp.description as tour_description  /* Add this */
         FROM bookings b 
         LEFT JOIN users p ON b.passenger_id = p.id 
+        LEFT JOIN tour_packages tp ON b.tour_package_id = tp.id  /* Add this */
         WHERE b.driver_id = ? 
         AND b.status = 'accepted'";
             
@@ -37,15 +40,18 @@ if (!isset($_SESSION['admin_logged_in'])) {
             $passenger_id = $_GET['passenger_id'];
             
             $sql = "SELECT b.*, 
-            p.first_name as passenger_name,
-            p.contact_number as passenger_contact,
-            d.first_name as driver_name,
-            d.contact_number as driver_contact
-            FROM bookings b 
-            LEFT JOIN users p ON b.passenger_id = p.id 
-            LEFT JOIN users d ON b.driver_id = d.id 
-            WHERE b.passenger_id = ? 
-            AND b.status IN ('accepted', 'pending')";
+        p.first_name as passenger_name,
+        p.contact_number as passenger_contact,
+        d.first_name as driver_name,
+        d.contact_number as driver_contact,
+        tp.name as tour_name,  /* Add this */
+        tp.description as tour_description  /* Add this */
+        FROM bookings b 
+        LEFT JOIN users p ON b.passenger_id = p.id 
+        LEFT JOIN users d ON b.driver_id = d.id 
+        LEFT JOIN tour_packages tp ON b.tour_package_id = tp.id  /* Add this */
+        WHERE b.passenger_id = ? 
+        AND b.status IN ('accepted', 'pending')";
             
             $stmt = mysqli_prepare($db, $sql);
             mysqli_stmt_bind_param($stmt, "i", $passenger_id);
@@ -325,7 +331,8 @@ if (isset($_POST['action']) && $_POST['action'] === 'driver_complete') {
             dropoff_longitude,
             distance_km,
             total_fare,
-            status
+            status,
+			tour_package_id
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')";
 
         $stmt = mysqli_prepare($db, $sql);

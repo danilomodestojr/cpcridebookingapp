@@ -97,21 +97,36 @@ class BookingDetailActivity : AppCompatActivity() {
     }
 
     private fun displayBookingDetails(booking: Booking) {
-        // Show different information based on whether it's an active booking
         if (isActiveBooking) {
             findViewById<TextView>(R.id.pickupLocationText).text =
                 "Passenger: ${booking.passenger_name ?: "Not available"}"
             findViewById<TextView>(R.id.dropoffLocationText).text =
                 "Contact: ${booking.passenger_contact ?: "Not available"}"
+
+            if (booking.booking_type == "tour" && booking.tour_name != null) {
+                findViewById<TextView>(R.id.distanceText).text =
+                    "Tour Package: ${booking.tour_name}"
+                findViewById<TextView>(R.id.fareText).text =
+                    "Route: ${booking.tour_points ?: ""}\n" +
+                            "Fare: ₱${String.format("%.2f", booking.total_fare)}"
+            } else {
+                findViewById<TextView>(R.id.distanceText).text =
+                    "Distance: ${String.format("%.2f", booking.distance_km)} km"
+                findViewById<TextView>(R.id.fareText).text =
+                    "Fare: ₱${String.format("%.2f", booking.total_fare)}"
+            }
         } else {
             findViewById<TextView>(R.id.pickupLocationText).text =
                 "Pickup Location: ${booking.pickup_location}"
-            findViewById<TextView>(R.id.dropoffLocationText).text =
-                "Dropoff Location: ${booking.dropoff_location}"
+            if (booking.booking_type == "tour") {
+                findViewById<TextView>(R.id.dropoffLocationText).text =
+                    "Tour Package: ${booking.tour_name}"
+            } else {
+                findViewById<TextView>(R.id.dropoffLocationText).text =
+                    "Dropoff Location: ${booking.dropoff_location}"
+            }
         }
 
-        findViewById<TextView>(R.id.distanceText).text =
-            "Distance: ${String.format("%.2f", booking.distance_km)} km"
         findViewById<TextView>(R.id.fareText).text =
             "Fare: ₱${String.format("%.2f", booking.total_fare)}"
     }

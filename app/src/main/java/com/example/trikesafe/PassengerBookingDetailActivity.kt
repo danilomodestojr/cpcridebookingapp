@@ -71,43 +71,50 @@ class PassengerBookingDetailActivity : AppCompatActivity() {
     }
 
     private fun displayBookingDetails(booking: Booking) {
+        // Add debug logs to see what data we're receiving
+        Log.d("PassengerBooking", "Displaying booking details: ${booking.id}")
+        Log.d("PassengerBooking", "Booking type: ${booking.booking_type}")
+        Log.d("PassengerBooking", "Tour name: ${booking.tour_name}")
+        Log.d("PassengerBooking", "Tour points: ${booking.tour_points}")
+        Log.d("PassengerBooking", "Status: ${booking.status}")
+
         when (booking.status) {
-            "pending" -> {
-                // Show locations while waiting for driver
-                findViewById<TextView>(R.id.driverNameText).text =
-                    "Driver: Waiting for driver..."
-                findViewById<TextView>(R.id.pickupLocationText).text =
-                    "Pickup Location: ${booking.pickup_location}"
-                findViewById<TextView>(R.id.dropoffLocationText).text =
-                    "Dropoff Location: ${booking.dropoff_location}"
-            }
             "accepted" -> {
-                // Show driver details when accepted
-                findViewById<TextView>(R.id.driverNameText).text =
-                    "Driver: ${booking.driver_name ?: "Unknown"}"
-                findViewById<TextView>(R.id.pickupLocationText).text =
-                    "Contact: ${booking.driver_contact ?: "Not available"}"
-                findViewById<TextView>(R.id.dropoffLocationText).text =
-                    "Trip Status: In Progress"
+                findViewById<TextView>(R.id.driverNameText).apply {
+                    text = "Driver: ${booking.driver_name ?: "Unknown"}"
+                    visibility = View.VISIBLE
+                }
+                findViewById<TextView>(R.id.pickupLocationText).apply {
+                    text = "Contact: ${booking.driver_contact ?: "Not available"}"
+                    visibility = View.VISIBLE
+                }
+
+                // Show tour information if it's a tour booking
+                if (booking.booking_type == "tour") {
+                    findViewById<TextView>(R.id.dropoffLocationText).apply {
+                        text = buildString {
+                            append("Tour Package: ${booking.tour_name ?: "Not available"}\n")
+                            append("Route: ${booking.tour_points ?: "Not available"}\n")
+                            append("Trip Status: In Progress")
+                        }
+                        visibility = View.VISIBLE
+                    }
+                } else {
+                    findViewById<TextView>(R.id.dropoffLocationText).apply {
+                        text = "Trip Status: In Progress"
+                        visibility = View.VISIBLE
+                    }
+                }
+
+                findViewById<TextView>(R.id.fareText).apply {
+                    text = "Fare: ₱${String.format("%.2f", booking.total_fare)}"
+                    visibility = View.VISIBLE
+                }
             }
             else -> {
-                findViewById<TextView>(R.id.driverNameText).text =
-                    "Driver: ${booking.driver_name ?: "Unknown"}"
-                findViewById<TextView>(R.id.pickupLocationText).text =
-                    "Status: ${booking.status.capitalize()}"
-                findViewById<TextView>(R.id.dropoffLocationText).text = ""
+                // Log unexpected status
+                Log.w("PassengerBooking", "Unexpected booking status: ${booking.status}")
             }
-        }
-
-        findViewById<TextView>(R.id.fareText).text =
-            "Fare: ₱${String.format("%.2f", booking.total_fare)}"
-
-        // Update status text
-        val statusText = findViewById<TextView>(R.id.statusText)
-        when (booking.status) {
-            "pending" -> statusText.text = "Waiting for Driver"
-            "accepted" -> statusText.text = "Trip in Progress"
-            else -> statusText.text = booking.status.capitalize()
         }
     }
 
@@ -303,6 +310,8 @@ class PassengerBookingDetailActivity : AppCompatActivity() {
         val sharedPreferences = getSharedPreferences("login_pref", Context.MODE_PRIVATE)
         val passengerId = sharedPreferences.getInt("user_id", 0)
 
+        Log.d("PassengerBooking", "Refreshing booking status for passenger: $passengerId")
+
         // Show loading indicator
         val loadingDialog = AlertDialog.Builder(this)
             .setMessage("Refreshing booking status...")
@@ -312,29 +321,26 @@ class PassengerBookingDetailActivity : AppCompatActivity() {
 
         ApiClient.getApi(this).getPassengerActiveBooking(passengerId).enqueue(object : Callback<Booking?> {
             override fun onResponse(call: Call<Booking?>, response: Response<Booking?>) {
-                runOnUiThread {
-                    loadingDialog.dismiss()
-                    if (response.isSuccessful) {
-                        response.body()?.let { updatedBooking ->
-                            booking = updatedBooking
-                            displayBookingDetails(updatedBooking)
-                            // Show driver found message if status changed to accepted
-                            if (updatedBooking.status == "accepted") {
-                                showDriverFoundMessage()
-                                setupConfirmButton() // Update confirm button visibility
-                            }
-                        }
-                    } else {
-                        showError("Failed to refresh booking status")
+                loadingDialog.dismiss()
+                if (response.isSuccessful) {
+                    response.body()?.let { updatedBooking ->
+                        Log.d("PassengerBooking", "Received booking update: $updatedBooking")
+                        booking = updatedBooking
+                        displayBookingDetails(updatedBooking)
+                    } ?: run {
+                        Log.e("PassengerBooking", "Received null booking")
                     }
+                } else {
+                    Log.e("PassengerBooking", "Error response: ${response.code()}")
+                    Log.e("PassengerBooking", "Error body: ${response.errorBody()?.string()}")
+                    showError("Failed to refresh booking status")
                 }
             }
 
-            override fun onFailure(call: Call<Booking?>, t: Throwable) {
-                runOnUiThread {
-                    loadingDialog.dismiss()
-                    showError("Failed to refresh: ${t.message}")
-                }
+            override fun onFailure(call: Call<Booking?>, t: Throwable) {  // Fixed this line
+                loadingDialog.dismiss()
+                Log.e("PassengerBooking", "Network error", t)
+                showError("Failed to refresh: ${t.message}")
             }
         })
     }
