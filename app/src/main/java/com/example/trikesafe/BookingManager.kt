@@ -12,15 +12,37 @@ import org.osmdroid.views.overlay.Overlay
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
+import com.example.trikesafe.FareSettings
+import com.example.trikesafe.FareSettingsResponse
 
 class BookingManager(
     private val context: Context,
     private val map: MapView,
     private var currentLocation: GeoPoint?
 ) {
+    private var fareSettings: FareSettings? = null
+
     init {
         ApiClient.initialize(context)
+        loadFareSettings()
     }
+
+    private fun loadFareSettings() {
+        ApiClient.getApi(context).getFareSettings().enqueue(object : Callback<FareSettingsResponse> {
+            override fun onResponse(call: Call<FareSettingsResponse>, response: Response<FareSettingsResponse>) {
+                if (response.isSuccessful && response.body()?.success == true) {
+                    fareSettings = response.body()?.settings
+                } else {
+                    Log.e("BookingManager", "Failed to load fare settings: ${response.message()}")
+                }
+            }
+
+            override fun onFailure(call: Call<FareSettingsResponse>, t: Throwable) {
+                Log.e("BookingManager", "Failed to load fare settings: ${t.message}")
+            }
+        })
+    }
+
     fun updateCurrentLocation(location: GeoPoint?) {
         currentLocation = location
     }
@@ -66,6 +88,15 @@ class BookingManager(
     }
 
     private fun handlePointToPointBooking(callback: BookingCallback) {
+        if (fareSettings == null) {
+            AlertDialog.Builder(context)
+                .setTitle("Error")
+                .setMessage("Unable to get fare information. Please try again later.")
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
+
         AlertDialog.Builder(context)
             .setTitle("Set Destination")
             .setMessage("Please tap your destination on the map")
@@ -108,10 +139,22 @@ class BookingManager(
     }
 
     private fun calculateFare(destinationPoint: GeoPoint, callback: BookingCallback) {
+        // If fare settings aren't loaded yet, show error
+        if (fareSettings == null) {
+            callback.onBookingError("Unable to calculate fare. Please try again.")
+            return
+        }
+
         val distance = currentLocation?.distanceToAsDouble(destinationPoint)?.div(1000) ?: 0.0
-        val baseFare = 30.0
-        val perKmRate = 10.0
-        val totalFare = baseFare + (distance * perKmRate)
+
+        val totalFare = if (distance <= fareSettings!!.minimum_distance) {
+            // If distance is within minimum distance (4km), just charge base fare
+            fareSettings!!.base_fare
+        } else {
+            // If distance exceeds 4km, add charges for additional distance
+            val additionalDistance = distance - fareSettings!!.minimum_distance
+            fareSettings!!.base_fare + (additionalDistance * fareSettings!!.additional_per_km)
+        }
 
         showBookingConfirmation(destinationPoint, distance, totalFare, callback)
     }
@@ -122,15 +165,30 @@ class BookingManager(
         fare: Double,
         callback: BookingCallback
     ) {
+        val message = if (distance <= fareSettings!!.minimum_distance) {
+            """
+        Distance: ${String.format("%.2f", distance)} km
+        Base Fare (up to ${fareSettings!!.minimum_distance}km): ₱${String.format("%.2f", fareSettings!!.base_fare)}
+        Total Fare: ₱${String.format("%.2f", fare)}
+        
+        Would you like to confirm booking?
+        """.trimIndent()
+        } else {
+            val additionalDistance = distance - fareSettings!!.minimum_distance
+            """
+        Distance: ${String.format("%.2f", distance)} km
+        Base Fare (first ${fareSettings!!.minimum_distance}km): ₱${String.format("%.2f", fareSettings!!.base_fare)}
+        Additional Distance: ${String.format("%.2f", additionalDistance)} km
+        Additional Charge: ₱${String.format("%.2f", additionalDistance * fareSettings!!.additional_per_km)}
+        Total Fare: ₱${String.format("%.2f", fare)}
+        
+        Would you like to confirm booking?
+        """.trimIndent()
+        }
+
         AlertDialog.Builder(context)
             .setTitle("Booking Details")
-            .setMessage("""
-                Distance: ${String.format("%.2f", distance)} km
-                Base Fare: ₱30.00
-                Total Fare: ₱${String.format("%.2f", fare)}
-                
-                Would you like to confirm booking?
-            """.trimIndent())
+            .setMessage(message)
             .setPositiveButton("Confirm") { _, _ -> saveBooking(destination, distance, fare, callback) }
             .setNegativeButton("Cancel", null)
             .show()

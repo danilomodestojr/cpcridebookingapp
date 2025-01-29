@@ -19,6 +19,9 @@ interface ApiService {
     @GET("bookings.php?status=pending")
     fun getPendingBookings(): Call<List<Booking>>
 
+    @GET("bookings.php")
+    fun getFareSettings(@Query("action") action: String = "get_fare_settings"): Call<FareSettingsResponse>
+
     // Driver-related endpoints
     @FormUrlEncoded
     @POST("bookings.php")
