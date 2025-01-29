@@ -329,35 +329,37 @@ class BookingDetailActivity : AppCompatActivity() {
                 override fun onResponse(call: Call<ApiResponse>, response: Response<ApiResponse>) {
                     if (response.isSuccessful && response.body()?.success == true) {
                         // Get the updated booking after acceptance
-                        ApiClient.getApi(this@BookingDetailActivity).getDriverActiveBooking(driverId).enqueue(object : Callback<Booking?> {
-                            override fun onResponse(call: Call<Booking?>, response: Response<Booking?>) {
-                                loadingDialog.dismiss()
-                                if (response.isSuccessful && response.body() != null) {
-                                    val updatedBooking = response.body()!!
-                                    isActiveBooking = true
-                                    runOnUiThread {
-                                        displayBookingDetails(updatedBooking)
-                                        setupButtons()
-                                        // Show success message
-                                        AlertDialog.Builder(this@BookingDetailActivity)
-                                            .setTitle("Success")
-                                            .setMessage("You have accepted this booking. The passenger will be notified.")
-                                            .setPositiveButton("OK", null)
-                                            .show()
+                        ApiClient.getApi(this@BookingDetailActivity).getDriverActiveBooking(driverId)
+                            .enqueue(object : Callback<Booking?> {
+                                override fun onResponse(call: Call<Booking?>, response: Response<Booking?>) {
+                                    loadingDialog.dismiss()
+                                    if (response.isSuccessful && response.body() != null) {
+                                        val updatedBooking = response.body()!!
+                                        isActiveBooking = true
+                                        runOnUiThread {
+                                            displayBookingDetails(updatedBooking)
+                                            setupButtons()
+                                            // Show success message
+                                            AlertDialog.Builder(this@BookingDetailActivity)
+                                                .setTitle("Success")
+                                                .setMessage("You have accepted this booking. The passenger will be notified.")
+                                                .setPositiveButton("OK", null)
+                                                .show()
+                                        }
+                                    } else {
+                                        showSuccessAndFinish()
                                     }
-                                } else {
+                                }
+
+                                override fun onFailure(call: Call<Booking?>, t: Throwable) {
+                                    loadingDialog.dismiss()
                                     showSuccessAndFinish()
                                 }
-                            }
-
-                            override fun onFailure(call: Call<Booking?>, t: Throwable) {
-                                loadingDialog.dismiss()
-                                showSuccessAndFinish()
-                            }
-                        })
+                            })
                     } else {
                         loadingDialog.dismiss()
-                        showError("Failed to accept booking. It might have been taken by another driver.")
+                        // Show error and return to booking list
+                        showBookingTakenError()
                     }
                 }
 
@@ -368,6 +370,20 @@ class BookingDetailActivity : AppCompatActivity() {
                 }
             })
         }
+    }
+
+    // Add this new function
+    private fun showBookingTakenError() {
+        AlertDialog.Builder(this)
+            .setTitle("Booking Unavailable")
+            .setMessage("This booking has already been accepted by another driver.")
+            .setPositiveButton("OK") { _, _ ->
+                // Return to booking list
+                startActivity(Intent(this, DriverActivity::class.java))
+                finish()
+            }
+            .setCancelable(false)
+            .show()
     }
 
     private fun showSuccessAndFinish() {
