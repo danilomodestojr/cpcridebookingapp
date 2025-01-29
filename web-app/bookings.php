@@ -77,6 +77,41 @@ if (!isset($_SESSION['admin_logged_in'])) {
         exit();
     }
         
+		// Tour packages endpoint
+if (isset($_GET['action']) && $_GET['action'] === 'get_tour_packages') {
+    header('Content-Type: application/json');  // Important!
+    error_log("Fetching tour packages");
+    
+    $sql = "SELECT * FROM tour_packages WHERE 1";
+    $result = mysqli_query($db, $sql);
+    
+    if ($result) {
+        $packages = [];
+        while ($row = mysqli_fetch_assoc($result)) {
+            $packages[] = [
+                'id' => intval($row['id']),
+                'name' => $row['name'],
+                'description' => $row['description'],
+                'route_points' => $row['route_points'],
+                'duration_minutes' => intval($row['duration_minutes']),
+                'price' => floatval($row['price']),
+                'created_at' => $row['created_at']
+            ];
+        }
+        
+        echo json_encode([
+            'success' => true,
+            'packages' => $packages
+        ]);
+    } else {
+        echo json_encode([
+            'success' => false,
+            'message' => 'Failed to fetch tour packages: ' . mysqli_error($db)
+        ]);
+    }
+    exit();
+}
+
         // Get bookings by status
         if (isset($_GET['status'])) {
             $sql = "SELECT b.*, 
