@@ -56,6 +56,8 @@ class PassengerBookingDetailActivity : AppCompatActivity() {
         displayBookingDetails(booking!!)
         setupMap(booking!!)
 
+        setupRefreshButton()
+
         // Setup completion confirmation button
         setupConfirmButton()
 
@@ -64,16 +66,38 @@ class PassengerBookingDetailActivity : AppCompatActivity() {
     }
 
     private fun displayBookingDetails(booking: Booking) {
-        findViewById<TextView>(R.id.driverNameText).text =
-            "Driver: ${booking.driver_name ?: "Waiting for driver..."}"
-        findViewById<TextView>(R.id.pickupLocationText).text =
-            "Pickup Location: ${booking.pickup_location}"
-        findViewById<TextView>(R.id.dropoffLocationText).text =
-            "Dropoff Location: ${booking.dropoff_location}"
+        when (booking.status) {
+            "pending" -> {
+                // Show locations while waiting for driver
+                findViewById<TextView>(R.id.driverNameText).text =
+                    "Driver: Waiting for driver..."
+                findViewById<TextView>(R.id.pickupLocationText).text =
+                    "Pickup Location: ${booking.pickup_location}"
+                findViewById<TextView>(R.id.dropoffLocationText).text =
+                    "Dropoff Location: ${booking.dropoff_location}"
+            }
+            "accepted" -> {
+                // Show driver details when accepted
+                findViewById<TextView>(R.id.driverNameText).text =
+                    "Driver: ${booking.driver_name ?: "Unknown"}"
+                findViewById<TextView>(R.id.pickupLocationText).text =
+                    "Contact: ${booking.driver_contact ?: "Not available"}"
+                findViewById<TextView>(R.id.dropoffLocationText).text =
+                    "Trip Status: In Progress"
+            }
+            else -> {
+                findViewById<TextView>(R.id.driverNameText).text =
+                    "Driver: ${booking.driver_name ?: "Unknown"}"
+                findViewById<TextView>(R.id.pickupLocationText).text =
+                    "Status: ${booking.status.capitalize()}"
+                findViewById<TextView>(R.id.dropoffLocationText).text = ""
+            }
+        }
+
         findViewById<TextView>(R.id.fareText).text =
             "Fare: ₱${String.format("%.2f", booking.total_fare)}"
 
-        // Update status text based on booking status
+        // Update status text
         val statusText = findViewById<TextView>(R.id.statusText)
         when (booking.status) {
             "pending" -> statusText.text = "Waiting for Driver"
@@ -274,21 +298,38 @@ class PassengerBookingDetailActivity : AppCompatActivity() {
         val sharedPreferences = getSharedPreferences("login_pref", Context.MODE_PRIVATE)
         val passengerId = sharedPreferences.getInt("user_id", 0)
 
+        // Show loading indicator
+        val loadingDialog = AlertDialog.Builder(this)
+            .setMessage("Refreshing booking status...")
+            .setCancelable(false)
+            .create()
+        loadingDialog.show()
+
         ApiClient.api.getPassengerActiveBooking(passengerId).enqueue(object : Callback<Booking?> {
             override fun onResponse(call: Call<Booking?>, response: Response<Booking?>) {
-                if (response.isSuccessful) {
-                    response.body()?.let { updatedBooking ->
-                        booking = updatedBooking
-                        displayBookingDetails(updatedBooking)
-                        if (updatedBooking.status == "accepted") {
-                            showDriverFoundMessage()
+                runOnUiThread {
+                    loadingDialog.dismiss()
+                    if (response.isSuccessful) {
+                        response.body()?.let { updatedBooking ->
+                            booking = updatedBooking
+                            displayBookingDetails(updatedBooking)
+                            // Show driver found message if status changed to accepted
+                            if (updatedBooking.status == "accepted") {
+                                showDriverFoundMessage()
+                                setupConfirmButton() // Update confirm button visibility
+                            }
                         }
+                    } else {
+                        showError("Failed to refresh booking status")
                     }
                 }
             }
 
             override fun onFailure(call: Call<Booking?>, t: Throwable) {
-                showError("Failed to refresh: ${t.message}")
+                runOnUiThread {
+                    loadingDialog.dismiss()
+                    showError("Failed to refresh: ${t.message}")
+                }
             }
         })
     }
@@ -296,7 +337,7 @@ class PassengerBookingDetailActivity : AppCompatActivity() {
     private fun showDriverFoundMessage() {
         AlertDialog.Builder(this)
             .setTitle("Driver Found!")
-            .setMessage("A driver has accepted your booking.")
+            .setMessage("A driver has accepted your booking. You can now see their details.")
             .setPositiveButton("OK", null)
             .show()
     }

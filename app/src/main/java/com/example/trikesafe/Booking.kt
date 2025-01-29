@@ -17,5 +17,6 @@ data class Booking(
     val status: String,
     val passenger_name: String?,  // Added for passenger info
     val driver_name: String?,     // Added for driver info
-    val passenger_contact: String?  // Added for passenger's contact number
+    val passenger_contact: String?,  // Added for passenger's contact number
+    val driver_contact: String?
 ) : Serializable

@@ -254,7 +254,13 @@ class BookingDetailActivity : AppCompatActivity() {
                 override fun onResponse(call: Call<ApiResponse>, response: Response<ApiResponse>) {
                     loadingDialog.dismiss()
                     if (response.isSuccessful && response.body()?.success == true) {
-                        showWaitingForPassengerConfirmation()
+                        if (response.body()?.message?.contains("completed", ignoreCase = true) == true) {
+                            // Booking is completed by passenger, return to driver activity
+                            showCompletionConfirmed()
+                        } else {
+                            // Still waiting for passenger confirmation
+                            showWaitingForPassengerConfirmation()
+                        }
                     } else {
                         showError("Failed to mark booking as complete. Please try again.")
                     }
@@ -266,6 +272,19 @@ class BookingDetailActivity : AppCompatActivity() {
                 }
             })
         }
+    }
+
+    private fun showCompletionConfirmed() {
+        AlertDialog.Builder(this)
+            .setTitle("Booking Completed")
+            .setMessage("The passenger has confirmed completion. You can now accept new bookings.")
+            .setPositiveButton("OK") { _, _ ->
+                // Return to driver activity
+                startActivity(Intent(this, DriverActivity::class.java))
+                finish()
+            }
+            .setCancelable(false)
+            .show()
     }
 
     private fun showWaitingForPassengerConfirmation() {

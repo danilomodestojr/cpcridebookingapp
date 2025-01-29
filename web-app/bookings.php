@@ -37,13 +37,15 @@ if (!isset($_SESSION['admin_logged_in'])) {
             $passenger_id = $_GET['passenger_id'];
             
             $sql = "SELECT b.*, 
-                    p.first_name as passenger_name,
-                    d.first_name as driver_name
-                    FROM bookings b 
-                    LEFT JOIN users p ON b.passenger_id = p.id 
-                    LEFT JOIN users d ON b.driver_id = d.id 
-                    WHERE b.passenger_id = ? 
-                    AND b.status IN ('accepted', 'pending')";
+            p.first_name as passenger_name,
+            p.contact_number as passenger_contact,
+            d.first_name as driver_name,
+            d.contact_number as driver_contact
+            FROM bookings b 
+            LEFT JOIN users p ON b.passenger_id = p.id 
+            LEFT JOIN users d ON b.driver_id = d.id 
+            WHERE b.passenger_id = ? 
+            AND b.status IN ('accepted', 'pending')";
             
             $stmt = mysqli_prepare($db, $sql);
             mysqli_stmt_bind_param($stmt, "i", $passenger_id);
@@ -137,41 +139,52 @@ if (!isset($_SESSION['admin_logged_in'])) {
         }
 
         // Handle driver marking booking as complete
-        if (isset($_POST['action']) && $_POST['action'] === 'driver_complete') {
-            error_log("Processing driver complete request");
-            
-            if (!isset($_POST['booking_id']) || !isset($_POST['driver_id'])) {
-                echo json_encode([
-                    'success' => false,
-                    'message' => 'Missing required fields'
-                ]);
-                exit();
-            }
-            
-            $booking_id = $_POST['booking_id'];
-            $driver_id = $_POST['driver_id'];
-            
-            // Check if this is their booking and it's in accepted status
-            $check_sql = "SELECT status FROM bookings WHERE id = ? AND driver_id = ? AND status = 'accepted'";
-            $check_stmt = mysqli_prepare($db, $check_sql);
-            mysqli_stmt_bind_param($check_stmt, "ii", $booking_id, $driver_id);
-            mysqli_stmt_execute($check_stmt);
-            $result = mysqli_stmt_get_result($check_stmt);
-            $booking = mysqli_fetch_assoc($result);
-            
-            if ($booking) {
-                echo json_encode([
-                    'success' => true,
-                    'message' => 'Please wait for passenger confirmation'
-                ]);
-            } else {
-                echo json_encode([
-                    'success' => false,
-                    'message' => 'Invalid booking or not authorized'
-                ]);
-            }
-            exit();
+if (isset($_POST['action']) && $_POST['action'] === 'driver_complete') {
+    error_log("Processing driver complete request");
+    
+    if (!isset($_POST['booking_id']) || !isset($_POST['driver_id'])) {
+        echo json_encode([
+            'success' => false,
+            'message' => 'Missing required fields'
+        ]);
+        exit();
+    }
+    
+    $booking_id = $_POST['booking_id'];
+    $driver_id = $_POST['driver_id'];
+    
+    // Check if this is their booking and check both accepted and completed status
+    $check_sql = "SELECT status FROM bookings WHERE id = ? AND driver_id = ? AND status IN ('accepted', 'completed')";
+    $check_stmt = mysqli_prepare($db, $check_sql);
+    mysqli_stmt_bind_param($check_stmt, "ii", $booking_id, $driver_id);
+    mysqli_stmt_execute($check_stmt);
+    $result = mysqli_stmt_get_result($check_stmt);
+    $booking = mysqli_fetch_assoc($result);
+    
+    if ($booking) {
+        if ($booking['status'] === 'completed') {
+            // Booking is already completed, notify driver
+            echo json_encode([
+                'success' => true,
+                'message' => 'Booking completed',
+                'status' => 'completed'
+            ]);
+        } else {
+            // Still waiting for passenger confirmation
+            echo json_encode([
+                'success' => true,
+                'message' => 'Please wait for passenger confirmation',
+                'status' => 'accepted'
+            ]);
         }
+    } else {
+        echo json_encode([
+            'success' => false,
+            'message' => 'Invalid booking or not authorized'
+        ]);
+    }
+    exit();
+}
 
         // Handle passenger confirming completion
         if (isset($_POST['action']) && $_POST['action'] === 'passenger_confirm') {
