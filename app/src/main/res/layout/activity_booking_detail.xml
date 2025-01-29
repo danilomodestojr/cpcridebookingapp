@@ -78,6 +78,16 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
             android:text="Fare: "/>
+
+        <Button
+            android:id="@+id/completeButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Mark as Complete"
+            android:layout_margin="16dp"
+            android:visibility="gone"
+            android:backgroundTint="@color/accent_blue"
+            app:layout_constraintBottom_toBottomOf="parent"/>
     </LinearLayout>
 
     <Button
@@ -89,14 +99,6 @@
         android:backgroundTint="#9C27B0"
         app:layout_constraintBottom_toBottomOf="parent"/>
 
-    <Button
-        android:id="@+id/completeButton"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Mark as Complete"
-        android:layout_margin="16dp"
-        android:visibility="gone"
-        android:backgroundTint="@color/accent_blue"
-        app:layout_constraintBottom_toBottomOf="parent"/>
+
 
 </androidx.constraintlayout.widget.ConstraintLayout>

@@ -5,6 +5,10 @@ import androidx.appcompat.app.AlertDialog
 import com.example.trikesafe.ApiClient
 import com.example.trikesafe.Booking
 import com.example.trikesafe.CreateBookingResponse
+import com.example.trikesafe.FareSettings
+import com.example.trikesafe.FareSettingsResponse
+import com.example.trikesafe.TourPackage
+import com.example.trikesafe.TourPackagesResponse  // ✅ Ensure this is correctly imported
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
@@ -12,10 +16,6 @@ import org.osmdroid.views.overlay.Overlay
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
-import com.example.trikesafe.FareSettings
-import com.example.trikesafe.FareSettingsResponse
-import com.example.trikesafe.TourPackage
-import com.example.trikesafe.TourPackagesResponse
 
 class BookingManager(
     private val context: Context,
@@ -195,13 +195,13 @@ class BookingManager(
 
 
     private fun showTourPackageDetails(tourPackage: TourPackage, callback: BookingCallback) {
-        val durationHours = tourPackage.duration_minutes / 60.0
+        val durationHours = tourPackage.duration_Minutes / 60.0
         val message = """
         Package: ${tourPackage.name}
         
         Description: ${tourPackage.description}
         
-        Places to Visit: ${tourPackage.route_points}
+        Places to Visit: ${tourPackage.route_Points}
         
         Duration: ${String.format("%.1f", durationHours)} hours
         Price: ₱${String.format("%.2f", tourPackage.price)}
@@ -213,7 +213,7 @@ class BookingManager(
             .setTitle("Tour Package Details")
             .setMessage(message)
             .setPositiveButton("Book Now") { _, _ ->
-                createTourBooking(tourPackage, callback)  // ✅ Fix: Pass callback correctly
+                createTourBooking(tourPackage, callback)  // Now passing the callback
             }
             .setNegativeButton("Cancel", null)
             .show()
@@ -224,43 +224,51 @@ class BookingManager(
         val sharedPreferences = context.getSharedPreferences("login_pref", Context.MODE_PRIVATE)
         val passengerId = sharedPreferences.getInt("user_id", 0)
 
+        // ✅ Ensure we fetch dropoff latitude & longitude from tourPackage
+        val dropoffLat = tourPackage.dropoffLatitude
+        val dropoffLon = tourPackage.dropoffLongitude
+
+        Log.d("BookingManager", "Tour Package Dropoff Coords: lat=$dropoffLat, lon=$dropoffLon")
+
         ApiClient.getApi(context).createBooking(
             passengerId = passengerId,
             bookingType = "tour",
             pickupLocation = "Tour Pickup Point",
-            dropoffLocation = tourPackage.route_points,
+            dropoffLocation = tourPackage.route_Points,
             pickupLatitude = currentLocation?.latitude ?: 0.0,
             pickupLongitude = currentLocation?.longitude ?: 0.0,
-            dropoffLatitude = 0.0,  // Not applicable for tours
-            dropoffLongitude = 0.0, // Not applicable for tours
-            distanceKm = 0.0,       // Not applicable for tours
-            totalFare = tourPackage.price
+            dropoffLatitude = dropoffLat,  // ✅ Correctly fetching from `tourPackage`
+            dropoffLongitude = dropoffLon,  // ✅ Correctly fetching from `tourPackage`
+            distanceKm = 0.0,
+            totalFare = tourPackage.price,
+            tourPackageId = tourPackage.id
         ).enqueue(object : Callback<CreateBookingResponse> {
-            override fun onResponse(
-                call: Call<CreateBookingResponse>,
-                response: Response<CreateBookingResponse>
-            ) {
+            override fun onResponse(call: Call<CreateBookingResponse>, response: Response<CreateBookingResponse>) {
                 if (response.isSuccessful && response.body()?.success == true) {
                     response.body()?.booking?.let { booking ->
                         Log.d("BookingManager", "Tour booking created successfully: ${booking.id}")
-                        callback.onBookingSuccess(booking)  // ✅ Fix: Now callback is recognized
+                        callback.onBookingSuccess(booking)
                     } ?: run {
                         Log.e("BookingManager", "Booking object is null in response")
-                        callback.onBookingError("Booking created but details not returned")  // ✅ Fix
+                        callback.onBookingError("Booking created but details not returned")
                     }
                 } else {
                     val errorMsg = response.body()?.message ?: "Failed to create booking"
                     Log.e("BookingManager", "API Error: $errorMsg")
-                    callback.onBookingError(errorMsg)  // ✅ Fix
+                    callback.onBookingError(errorMsg)
                 }
             }
 
             override fun onFailure(call: Call<CreateBookingResponse>, t: Throwable) {
                 Log.e("BookingManager", "Network error: ${t.message}", t)
-                callback.onBookingError("Network error: ${t.message}")  // ✅ Fix
+                callback.onBookingError("Network error: ${t.message}")
             }
         })
     }
+
+
+
+
 
 
     private fun showError(message: String) {

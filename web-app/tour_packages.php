@@ -80,6 +80,14 @@ $result = mysqli_query($db, $sql);
                             <label>Route Points</label>
                             <textarea name="route_points" class="form-control" rows="3" required></textarea>
                         </div>
+						<div class="mb-3">
+    <label>Dropoff Latitude</label>
+    <input type="text" name="dropoff_latitude" class="form-control" placeholder="Enter latitude" required>
+</div>
+<div class="mb-3">
+    <label>Dropoff Longitude</label>
+    <input type="text" name="dropoff_longitude" class="form-control" placeholder="Enter longitude" required>
+</div>
                         <div class="mb-3">
                             <label>Duration (minutes)</label>
                             <input type="number" name="duration" class="form-control" required>
@@ -88,6 +96,7 @@ $result = mysqli_query($db, $sql);
                             <label>Price</label>
                             <input type="number" step="0.01" name="price" class="form-control" required>
                         </div>
+						
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>

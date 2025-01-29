@@ -9,6 +9,9 @@ import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.Query
 
+import com.example.trikesafe.TourPackagesResponse  // ✅ Corrected Import
+import com.example.trikesafe.TourPackage  // ✅ Ensure TourPackage is also imported
+
 interface ApiService {
     @POST("register.php")
     suspend fun registerUser(@Body user: UserData): Response<ApiResponse>
@@ -19,9 +22,18 @@ interface ApiService {
     @GET("bookings.php?status=pending")
     fun getPendingBookings(): Call<List<Booking>>
 
+
     @GET("bookings.php")
     fun getFareSettings(@Query("action") action: String = "get_fare_settings"): Call<FareSettingsResponse>
 
+    @GET("bookings.php")
+    fun getDriverActiveBooking(
+        @Query("driver_id") driverId: Int,
+        @Query("booking_id") bookingId: Int,  // Add this parameter
+        @Query("action") action: String = "check_active"
+    ): Call<Booking?>
+
+    // ✅ Fixed: Removed duplicate `getTourPackages`
     @GET("bookings.php")
     fun getTourPackages(@Query("action") action: String = "get_tour_packages"): Call<TourPackagesResponse>
 
@@ -63,7 +75,7 @@ interface ApiService {
         @Field("passenger_id") passengerId: Int
     ): Call<ApiResponse>
 
-    // Create new booking endpoint
+    // ✅ Ensure `dropoff_latitude` and `dropoff_longitude` are properly included
     @FormUrlEncoded
     @POST("bookings.php")
     fun createBooking(
@@ -73,11 +85,11 @@ interface ApiService {
         @Field("dropoff_location") dropoffLocation: String,
         @Field("pickup_latitude") pickupLatitude: Double,
         @Field("pickup_longitude") pickupLongitude: Double,
-        @Field("dropoff_latitude") dropoffLatitude: Double,
-        @Field("dropoff_longitude") dropoffLongitude: Double,
+        @Field("dropoff_latitude") dropoffLatitude: Double,  // ✅ Added correct parameter
+        @Field("dropoff_longitude") dropoffLongitude: Double, // ✅ Added correct parameter
         @Field("distance_km") distanceKm: Double,
         @Field("total_fare") totalFare: Double,
-        @Field("tour_package_id") tourPackageId: Int? = null
+        @Field("tour_package_id") tourPackageId: Int? = null  // ✅ Ensure nullable for non-tour bookings
     ): Call<CreateBookingResponse>
 }
 

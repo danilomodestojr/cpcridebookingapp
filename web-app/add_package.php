@@ -8,9 +8,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $route_points = mysqli_real_escape_string($db, $_POST['route_points']);
     $duration = (int)$_POST['duration'];
     $price = (float)$_POST['price'];
+    $dropoff_latitude = (float)$_POST['dropoff_latitude']; // New
+    $dropoff_longitude = (float)$_POST['dropoff_longitude']; // New
 
-    $sql = "INSERT INTO tour_packages (name, description, route_points, duration_minutes, price) 
-            VALUES ('$name', '$description', '$route_points', $duration, $price)";
+    $sql = "INSERT INTO tour_packages (name, description, route_points, duration_minutes, price, dropoff_latitude, dropoff_longitude) 
+            VALUES ('$name', '$description', '$route_points', $duration, $price, $dropoff_latitude, $dropoff_longitude)";
 
     if (mysqli_query($db, $sql)) {
         header("Location: tour_packages.php?success=1");

@@ -97,39 +97,53 @@ class BookingDetailActivity : AppCompatActivity() {
     }
 
     private fun displayBookingDetails(booking: Booking) {
+        Log.d("BookingDetailActivity", "Displaying booking details for tour booking:")
+        Log.d("BookingDetailActivity", "Tour name: ${booking.tour_name}")
+        Log.d("BookingDetailActivity", "Tour points: ${booking.tour_points}")
+        Log.d("BookingDetailActivity", "Booking type: ${booking.booking_type}")
+
         if (isActiveBooking) {
+            // After driver accepts
             findViewById<TextView>(R.id.pickupLocationText).text =
                 "Passenger: ${booking.passenger_name ?: "Not available"}"
             findViewById<TextView>(R.id.dropoffLocationText).text =
                 "Contact: ${booking.passenger_contact ?: "Not available"}"
 
-            if (booking.booking_type == "tour" && booking.tour_name != null) {
+            if (booking.booking_type == "tour") {
                 findViewById<TextView>(R.id.distanceText).text =
-                    "Tour Package: ${booking.tour_name}"
-                findViewById<TextView>(R.id.fareText).text =
-                    "Route: ${booking.tour_points ?: ""}\n" +
-                            "Fare: ₱${String.format("%.2f", booking.total_fare)}"
+                    "Tour Package: ${booking.tour_name}\n" +
+                            "Tour Route: ${booking.tour_points}"
             } else {
                 findViewById<TextView>(R.id.distanceText).text =
                     "Distance: ${String.format("%.2f", booking.distance_km)} km"
-                findViewById<TextView>(R.id.fareText).text =
-                    "Fare: ₱${String.format("%.2f", booking.total_fare)}"
             }
         } else {
-            findViewById<TextView>(R.id.pickupLocationText).text =
-                "Pickup Location: ${booking.pickup_location}"
+            // Before accepting - show tour info for tour bookings
             if (booking.booking_type == "tour") {
+                findViewById<TextView>(R.id.pickupLocationText).text =
+                    "Pickup Location: ${booking.pickup_location}"
                 findViewById<TextView>(R.id.dropoffLocationText).text =
                     "Tour Package: ${booking.tour_name}"
+                findViewById<TextView>(R.id.distanceText).text =
+                    "Tour Route: ${booking.tour_points}"
             } else {
+                findViewById<TextView>(R.id.pickupLocationText).text =
+                    "Pickup Location: ${booking.pickup_location}"
                 findViewById<TextView>(R.id.dropoffLocationText).text =
                     "Dropoff Location: ${booking.dropoff_location}"
+                findViewById<TextView>(R.id.distanceText).text =
+                    "Distance: ${String.format("%.2f", booking.distance_km)} km"
             }
         }
 
         findViewById<TextView>(R.id.fareText).text =
-            "Fare: ₱${String.format("%.2f", booking.total_fare)}"
+            if (booking.booking_type == "tour") {
+                "Tour Fare: ₱${String.format("%.2f", booking.total_fare)}"
+            } else {
+                "Fare: ₱${String.format("%.2f", booking.total_fare)}"
+            }
     }
+
 
     private fun setupMap(booking: Booking) {
         val pickupPoint = GeoPoint(booking.pickup_latitude, booking.pickup_longitude)
@@ -350,11 +364,18 @@ class BookingDetailActivity : AppCompatActivity() {
                                     loadingDialog.dismiss()
                                     if (response.isSuccessful && response.body() != null) {
                                         val updatedBooking = response.body()!!
+
+                                        val route = updatedBooking.route ?: "Unknown"
+                                        val dropoffLocation = updatedBooking.dropoff_location ?: route
+
+                                        Log.d("BookingDetailActivity", "Route: $route")
+                                        Log.d("BookingDetailActivity", "Dropoff Location: $dropoffLocation")
+
+                                        val finalBooking = updatedBooking.copy(route = route, dropoff_location = dropoffLocation)
                                         isActiveBooking = true
                                         runOnUiThread {
-                                            displayBookingDetails(updatedBooking)
+                                            displayBookingDetails(finalBooking)
                                             setupButtons()
-                                            // Show success message
                                             AlertDialog.Builder(this@BookingDetailActivity)
                                                 .setTitle("Success")
                                                 .setMessage("You have accepted this booking. The passenger will be notified.")
@@ -365,6 +386,7 @@ class BookingDetailActivity : AppCompatActivity() {
                                         showSuccessAndFinish()
                                     }
                                 }
+
 
                                 override fun onFailure(call: Call<Booking?>, t: Throwable) {
                                     loadingDialog.dismiss()
@@ -450,4 +472,3 @@ class BookingDetailActivity : AppCompatActivity() {
         map.onPause()
     }
 }
-

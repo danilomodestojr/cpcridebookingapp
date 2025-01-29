@@ -24,6 +24,7 @@ import org.osmdroid.util.BoundingBox
 class PassengerBookingDetailActivity : AppCompatActivity() {
     private lateinit var map: MapView
     private var booking: Booking? = null
+    private var isActiveBooking: Boolean = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -34,6 +35,7 @@ class PassengerBookingDetailActivity : AppCompatActivity() {
         setContentView(R.layout.activity_passenger_booking_detail)
 
 
+
         // Setup logout button
         findViewById<Button>(R.id.logoutButton).setOnClickListener {
             showLogoutConfirmation()
@@ -41,7 +43,7 @@ class PassengerBookingDetailActivity : AppCompatActivity() {
 
         Log.d("PassengerBookingDetail", "Started activity")
 
-        // Get booking from intent
+        // Get booking from intent and update isActiveBooking status
         booking = intent.getSerializableExtra("booking") as? Booking
         Log.d("PassengerBookingDetail", "Received booking: $booking")
 
@@ -50,6 +52,8 @@ class PassengerBookingDetailActivity : AppCompatActivity() {
             finish()
             return
         }
+
+        isActiveBooking = booking?.status == "accepted"  // Set based on booking status
 
         // Initialize map
         Configuration.getInstance().load(this, getSharedPreferences("osm_pref", MODE_PRIVATE))
@@ -71,51 +75,53 @@ class PassengerBookingDetailActivity : AppCompatActivity() {
     }
 
     private fun displayBookingDetails(booking: Booking) {
-        // Add debug logs to see what data we're receiving
-        Log.d("PassengerBooking", "Displaying booking details: ${booking.id}")
-        Log.d("PassengerBooking", "Booking type: ${booking.booking_type}")
-        Log.d("PassengerBooking", "Tour name: ${booking.tour_name}")
-        Log.d("PassengerBooking", "Tour points: ${booking.tour_points}")
-        Log.d("PassengerBooking", "Status: ${booking.status}")
+        Log.d("PassengerBookingDetail", "Displaying booking details: ${booking.id}")
+        Log.d("PassengerBookingDetail", "Booking type: ${booking.booking_type}")
+        Log.d("PassengerBookingDetail", "Tour name: ${booking.tour_name}")
+        Log.d("PassengerBookingDetail", "Tour points: ${booking.tour_points}")
+        Log.d("PassengerBookingDetail", "Status: ${booking.status}")
 
-        when (booking.status) {
-            "accepted" -> {
-                findViewById<TextView>(R.id.driverNameText).apply {
-                    text = "Driver: ${booking.driver_name ?: "Unknown"}"
-                    visibility = View.VISIBLE
-                }
-                findViewById<TextView>(R.id.pickupLocationText).apply {
-                    text = "Contact: ${booking.driver_contact ?: "Not available"}"
-                    visibility = View.VISIBLE
-                }
+        if (booking.status == "accepted") {  // Use booking.status directly instead of isActiveBooking
+            // Show driver details when accepted
+            findViewById<TextView>(R.id.driverNameText).text =
+                "Driver: ${booking.driver_name ?: "Unknown"}"
+            findViewById<TextView>(R.id.pickupLocationText).text =
+                "Contact: ${booking.driver_contact ?: "Not available"}"
 
-                // Show tour information if it's a tour booking
-                if (booking.booking_type == "tour") {
-                    findViewById<TextView>(R.id.dropoffLocationText).apply {
-                        text = buildString {
-                            append("Tour Package: ${booking.tour_name ?: "Not available"}\n")
-                            append("Route: ${booking.tour_points ?: "Not available"}\n")
-                            append("Trip Status: In Progress")
-                        }
-                        visibility = View.VISIBLE
-                    }
-                } else {
-                    findViewById<TextView>(R.id.dropoffLocationText).apply {
-                        text = "Trip Status: In Progress"
-                        visibility = View.VISIBLE
-                    }
+            if (booking.booking_type == "tour") {
+                findViewById<TextView>(R.id.dropoffLocationText).text = buildString {
+                    append("Tour Package: ${booking.tour_name}\n")
+                    append("Tour Destinations: ${booking.tour_points}\n")
+                    append("Trip Status: In Progress")
                 }
-
-                findViewById<TextView>(R.id.fareText).apply {
-                    text = "Fare: ₱${String.format("%.2f", booking.total_fare)}"
-                    visibility = View.VISIBLE
-                }
+            } else {
+                findViewById<TextView>(R.id.dropoffLocationText).text =
+                    "Trip Status: In Progress"
             }
-            else -> {
-                // Log unexpected status
-                Log.w("PassengerBooking", "Unexpected booking status: ${booking.status}")
+        } else {
+            // Show locations while waiting for driver
+            findViewById<TextView>(R.id.driverNameText).text =
+                "Driver: Waiting for driver..."
+            findViewById<TextView>(R.id.pickupLocationText).text =
+                "Pickup Location: ${booking.pickup_location}"
+
+            if (booking.booking_type == "tour") {
+                findViewById<TextView>(R.id.dropoffLocationText).text = buildString {
+                    append("Tour Package: ${booking.tour_name}\n")
+                    append("Tour Destinations: ${booking.tour_points}")
+                }
+            } else {
+                findViewById<TextView>(R.id.dropoffLocationText).text =
+                    "Dropoff Location: ${booking.dropoff_location}"
             }
         }
+
+        findViewById<TextView>(R.id.fareText).text =
+            if (booking.booking_type == "tour") {
+                "Tour Fare: ₱${String.format("%.2f", booking.total_fare)}"
+            } else {
+                "Fare: ₱${String.format("%.2f", booking.total_fare)}"
+            }
     }
 
     private fun setupMap(booking: Booking) {
@@ -324,9 +330,14 @@ class PassengerBookingDetailActivity : AppCompatActivity() {
                 loadingDialog.dismiss()
                 if (response.isSuccessful) {
                     response.body()?.let { updatedBooking ->
-                        Log.d("PassengerBooking", "Received booking update: $updatedBooking")
-                        booking = updatedBooking
-                        displayBookingDetails(updatedBooking)
+                        val route = updatedBooking.route ?: "Unknown"  // ✅ Ensure `route_points` fallback
+                        val dropoffLocation = updatedBooking.dropoff_location ?: route  // ✅ Set dropoff to route if empty
+
+                        Log.d("PassengerBooking", "Route: $route")
+                        Log.d("PassengerBooking", "Dropoff Location: $dropoffLocation")
+
+                        booking = updatedBooking.copy(route = route, dropoff_location = dropoffLocation)
+                        displayBookingDetails(booking!!)
                     } ?: run {
                         Log.e("PassengerBooking", "Received null booking")
                     }

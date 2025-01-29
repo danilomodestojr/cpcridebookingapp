@@ -43,11 +43,16 @@ class DriverActivity : AppCompatActivity() {
                 loadingDialog.dismiss()
                 if (response.isSuccessful) {
                     response.body()?.let { booking ->
-                        // Has active booking, go to map view
-                        startBookingMapActivity(booking)
+                        val route = booking.route ?: "Unknown"
+                        val dropoffLocation = booking.dropoff_location ?: route
+
+                        Log.d("DriverActivity", "Route: $route")
+                        Log.d("DriverActivity", "Dropoff Location: $dropoffLocation")
+
+                        val finalBooking = booking.copy(route = route, dropoff_location = dropoffLocation)
+                        startBookingMapActivity(finalBooking)
                         finish() // Close this activity
                     } ?: run {
-                        // No active booking, initialize booking list
                         initializeBookingsList()
                     }
                 } else {
