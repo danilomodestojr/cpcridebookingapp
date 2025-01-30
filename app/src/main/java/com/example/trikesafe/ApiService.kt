@@ -19,8 +19,13 @@ interface ApiService {
     @POST("login_process.php")
     suspend fun loginUser(@Body loginRequest: LoginRequest): Response<ApiResponse>
 
-    @GET("bookings.php?status=pending")
-    fun getPendingBookings(): Call<List<Booking>>
+   // @GET("bookings.php?status=pending")
+   // fun getPendingBookings(): Call<List<Booking>>
+
+    @GET("bookings.php")
+    fun getPendingBookings(
+        @Query("action") action: String = "get_pending"
+    ): Call<List<Booking>>
 
 
     @GET("bookings.php")

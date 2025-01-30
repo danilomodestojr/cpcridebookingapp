@@ -17,7 +17,7 @@
         android:id="@+id/emailInput"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="Email"
+        android:hint="UserName"
         android:inputType="textEmailAddress"
         android:padding="12dp"
         android:layout_marginBottom="16dp"/>

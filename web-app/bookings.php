@@ -147,6 +147,30 @@ if (isset($_GET['action']) && $_GET['action'] === 'get_tour_packages') {
     exit();
 }
 
+		// Add the get_pending section here
+if (isset($_GET['action']) && $_GET['action'] === 'get_pending') {
+    $sql = "SELECT b.*, 
+        tp.name as tour_name,
+        tp.route_points as tour_points,
+        tp.description as tour_description
+        FROM bookings b 
+        LEFT JOIN tour_packages tp ON b.tour_package_id = tp.id
+        WHERE b.status = 'pending'
+        ORDER BY b.created_at DESC";
+    
+    $result = mysqli_query($db, $sql);
+    $bookings = array();
+    
+    while ($row = mysqli_fetch_assoc($result)) {
+        $bookings[] = $row;
+    }
+    
+    echo json_encode($bookings);
+    exit();
+}
+
+	
+	
 
 
         // Get bookings by status

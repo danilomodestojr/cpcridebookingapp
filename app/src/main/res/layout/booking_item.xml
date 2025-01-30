@@ -20,6 +20,14 @@
             android:textStyle="bold"/>
 
         <TextView
+            android:id="@+id/bookingType"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textStyle="bold"
+            android:visibility="gone"/>
+
+        <TextView
             android:id="@+id/pickupLocation"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -32,6 +40,13 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
             android:text="Dropoff: "/>
+
+        <TextView
+            android:id="@+id/tourInfo"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:visibility="gone"/>
 
         <TextView
             android:id="@+id/fare"

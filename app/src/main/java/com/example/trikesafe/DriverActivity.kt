@@ -119,11 +119,19 @@ class DriverActivity : AppCompatActivity() {
     private fun loadPendingBookings() {
         ApiClient.getApi(this).getPendingBookings().enqueue(object : Callback<List<Booking>> {
             override fun onResponse(call: Call<List<Booking>>, response: Response<List<Booking>>) {
-                // Stop the refresh animation
                 swipeRefreshLayout.isRefreshing = false
 
                 if (response.isSuccessful) {
                     response.body()?.let { bookings ->
+                        // Add debug logging
+                        bookings.forEach { booking ->
+                            Log.d("DriverActivity", """
+                            Booking #${booking.id}:
+                            Type: ${booking.booking_type}
+                            Tour name: ${booking.tour_name}
+                            Tour points: ${booking.tour_points}
+                        """.trimIndent())
+                        }
                         bookingsAdapter.updateBookings(bookings)
                     }
                 } else {
@@ -132,7 +140,6 @@ class DriverActivity : AppCompatActivity() {
             }
 
             override fun onFailure(call: Call<List<Booking>>, t: Throwable) {
-                // Stop the refresh animation
                 swipeRefreshLayout.isRefreshing = false
                 showError("Network error: ${t.message}")
             }

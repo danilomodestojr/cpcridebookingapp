@@ -1,3 +1,5 @@
+//BookingDetailActivity.kt
+
 package com.example.trikesafe
 
 import android.content.Context
@@ -110,9 +112,12 @@ class BookingDetailActivity : AppCompatActivity() {
                 "Contact: ${booking.passenger_contact ?: "Not available"}"
 
             if (booking.booking_type == "tour") {
-                findViewById<TextView>(R.id.distanceText).text =
-                    "Tour Package: ${booking.tour_name}\n" +
-                            "Tour Route: ${booking.tour_points}"
+                findViewById<TextView>(R.id.distanceText).text = buildString {
+                    append("Tour Package: ${booking.tour_name}")
+                    // Use tour_points if available, otherwise fallback to route
+                    val routeInfo = booking.tour_points ?: booking.route ?: booking.dropoff_location
+                    append("\nDestinations: $routeInfo")
+                }
             } else {
                 findViewById<TextView>(R.id.distanceText).text =
                     "Distance: ${String.format("%.2f", booking.distance_km)} km"
@@ -125,7 +130,7 @@ class BookingDetailActivity : AppCompatActivity() {
                 findViewById<TextView>(R.id.dropoffLocationText).text =
                     "Tour Package: ${booking.tour_name}"
                 findViewById<TextView>(R.id.distanceText).text =
-                    "Tour Route: ${booking.tour_points}"
+                    "Destinations: ${booking.tour_points ?: booking.route ?: booking.dropoff_location}"
             } else {
                 findViewById<TextView>(R.id.pickupLocationText).text =
                     "Pickup Location: ${booking.pickup_location}"
