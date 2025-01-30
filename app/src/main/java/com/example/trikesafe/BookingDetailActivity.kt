@@ -112,11 +112,25 @@ class BookingDetailActivity : AppCompatActivity() {
                 "Contact: ${booking.passenger_contact ?: "Not available"}"
 
             if (booking.booking_type == "tour") {
+                // Log what we're getting
+                Log.d("BookingDetail", """
+            Tour data:
+            tour_points: ${booking.tour_points}
+            route: ${booking.route}
+            dropoff_location: ${booking.dropoff_location}
+        """.trimIndent())
+
+                // Use any available tour route information
+                val destinations = when {
+                    !booking.tour_points.isNullOrEmpty() -> booking.tour_points
+                    !booking.route.isNullOrEmpty() -> booking.route
+                    !booking.dropoff_location.isNullOrEmpty() -> booking.dropoff_location
+                    else -> "Route details not available"
+                }
+
                 findViewById<TextView>(R.id.distanceText).text = buildString {
-                    append("Tour Package: ${booking.tour_name}")
-                    // Use tour_points if available, otherwise fallback to route
-                    val routeInfo = booking.tour_points ?: booking.route ?: booking.dropoff_location
-                    append("\nDestinations: $routeInfo")
+                    append("Tour Package: ${booking.tour_name}\n")
+                    append("Destinations: $destinations")
                 }
             } else {
                 findViewById<TextView>(R.id.distanceText).text =

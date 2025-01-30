@@ -10,18 +10,19 @@ if (!isset($_SESSION['admin_logged_in'])) {
     // Handle GET request for pending bookings
     if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         // Check for active booking (driver)
-        if (isset($_GET['action']) && $_GET['action'] === 'check_active' && isset($_GET['driver_id'])) {
-            $driver_id = $_GET['driver_id'];
-            
-            $sql = "SELECT b.*, 
+if (isset($_GET['action']) && $_GET['action'] === 'check_active' && isset($_GET['driver_id'])) {
+    $driver_id = $_GET['driver_id'];
+    
+    $sql = "SELECT b.*, 
         p.first_name AS passenger_name,
         p.contact_number AS passenger_contact,
-        tp.name as tour_name,  /* Add this */
-        tp.description as tour_description,  /* Add this */
-		b.dropoff_location AS route
+        tp.name as tour_name,
+        tp.description as tour_description,
+        tp.route_points as tour_points,
+        COALESCE(tp.route_points, b.dropoff_location) as route
         FROM bookings b 
         LEFT JOIN users p ON b.passenger_id = p.id 
-        LEFT JOIN tour_packages tp ON b.tour_package_id = tp.id  /* Add this */
+        LEFT JOIN tour_packages tp ON b.tour_package_id = tp.id
         WHERE b.driver_id = ? 
         AND b.status = 'accepted'";
             
@@ -201,6 +202,113 @@ if (isset($_GET['action']) && $_GET['action'] === 'get_pending') {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     error_log("Raw POST data: " . file_get_contents('php://input'));
     error_log("POST array: " . print_r($_POST, true));
+	
+	 // Handle feedback submission
+    // Handle feedback submission
+if (isset($_POST['action']) && $_POST['action'] === 'feedback') {
+    if (!isset($_POST['booking_id']) || !isset($_POST['passenger_id']) || 
+        !isset($_POST['driver_id']) || !isset($_POST['rating'])) {
+        echo json_encode([
+            'success' => false,
+            'message' => 'Missing required fields'
+        ]);
+        exit();
+    }
+
+    $booking_id = $_POST['booking_id'];
+    $passenger_id = $_POST['passenger_id'];
+    $driver_id = $_POST['driver_id'];
+    $rating = $_POST['rating'];
+    $comment = $_POST['comment'] ?? '';
+
+    $sql = "INSERT INTO feedback (booking_id, passenger_id, driver_id, rating, comment) 
+            VALUES (?, ?, ?, ?, ?)";
+    
+    $stmt = mysqli_prepare($db, $sql);
+    mysqli_stmt_bind_param($stmt, "iiiis", $booking_id, $passenger_id, $driver_id, $rating, $comment);
+
+    if (mysqli_stmt_execute($stmt)) {
+        echo json_encode([
+            'success' => true,
+            'message' => 'Feedback submitted successfully'
+        ]);
+    } else {
+        echo json_encode([
+            'success' => false,
+            'message' => 'Failed to submit feedback'
+        ]);
+    }
+    exit();
+}
+	// End Handle feedback submission
+	
+	// Add the cancellation code here
+	
+	// Handle booking cancellation
+if (isset($_POST['action']) && $_POST['action'] === 'cancel') {
+    error_log("Processing booking cancellation request");
+
+    if (!isset($_POST['booking_id']) || !isset($_POST['passenger_id'])) {
+        echo json_encode([
+            'success' => false,
+            'message' => 'Missing required fields'
+        ]);
+        exit();
+    }
+
+    $booking_id = $_POST['booking_id'];
+    $passenger_id = $_POST['passenger_id'];
+
+    // Start transaction
+    mysqli_begin_transaction($db);
+
+    try {
+        // Check if booking is still pending
+        $check_sql = "SELECT status FROM bookings WHERE id = ? AND passenger_id = ? FOR UPDATE";
+        $check_stmt = mysqli_prepare($db, $check_sql);
+        mysqli_stmt_bind_param($check_stmt, "ii", $booking_id, $passenger_id);
+        mysqli_stmt_execute($check_stmt);
+        $result = mysqli_stmt_get_result($check_stmt);
+        $booking = mysqli_fetch_assoc($result);
+
+        if ($booking && $booking['status'] === 'pending') {
+            // Update booking status to cancelled
+            $update_sql = "UPDATE bookings SET status = 'cancelled' WHERE id = ?";
+            $update_stmt = mysqli_prepare($db, $update_sql);
+            mysqli_stmt_bind_param($update_stmt, "i", $booking_id);
+
+            if (mysqli_stmt_execute($update_stmt)) {
+                mysqli_commit($db);
+                echo json_encode([
+                    'success' => true,
+                    'message' => 'Booking cancelled successfully'
+                ]);
+            } else {
+                mysqli_rollback($db);
+                echo json_encode([
+                    'success' => false,
+                    'message' => 'Failed to cancel booking'
+                ]);
+            }
+        } else {
+            mysqli_rollback($db);
+            echo json_encode([
+                'success' => false,
+                'message' => 'Booking has already been accepted by a driver'
+            ]);
+        }
+    } catch (Exception $e) {
+        mysqli_rollback($db);
+        echo json_encode([
+            'success' => false,
+            'message' => 'An error occurred while processing your request'
+        ]);
+    }
+    exit();
+}
+	
+	
+	// End the cancellation code here
 
     // Handle booking acceptance
     if (isset($_POST['action']) && $_POST['action'] === 'accept') {
@@ -469,18 +577,66 @@ if(!isset($_SESSION['admin_logged_in'])) {
     exit();
 }
 
+// Pagination Setup
+$records_per_page = 15;
+$page = isset($_GET['page']) && is_numeric($_GET['page']) ? (int) $_GET['page'] : 1;
+$offset = ($page - 1) * $records_per_page;
+
+// Sorting Logic
+$columns = ['id', 'booking_type', 'tour_package_name', 'passenger_name', 'driver_name', 'rating', 'comment', 'status', 'total_fare', 'created_at'];
+$sort_column = isset($_GET['sort']) && in_array($_GET['sort'], $columns) ? $_GET['sort'] : 'created_at';
+$sort_order = isset($_GET['order']) && $_GET['order'] === 'asc' ? 'ASC' : 'DESC';
+
+// Query with Sorting & Pagination
 $sql = "SELECT b.*, 
-        p.first_name as passenger_name, 
-        d.first_name as driver_name 
+        p.first_name AS passenger_name, 
+        d.first_name AS driver_name,
+        f.rating, 
+        f.comment,
+        COALESCE(tp.name, 'Regular') AS tour_package_name -- ✅ Ensure correct package name
         FROM bookings b 
         LEFT JOIN users p ON b.passenger_id = p.id 
         LEFT JOIN users d ON b.driver_id = d.id 
-        ORDER BY b.created_at DESC";
+        LEFT JOIN feedback f ON b.id = f.booking_id
+        LEFT JOIN tour_packages tp ON b.tour_package_id = tp.id 
+        ORDER BY $sort_column $sort_order
+        LIMIT $records_per_page OFFSET $offset";
+
+
 $result = mysqli_query($db, $sql);
+
+if (!$result) {
+    die("Database query failed: " . mysqli_error($db)); // Debugging query failure
+}
+
+// Get Total Number of Records for Pagination
+$total_sql = "SELECT COUNT(*) AS total FROM bookings";
+$total_result = mysqli_query($db, $total_sql);
+$total_row = mysqli_fetch_assoc($total_result);
+$total_records = $total_row['total'];
+$total_pages = ceil($total_records / $records_per_page);
+
 ?>
 <!DOCTYPE html>
 <html>
 <head>
+<style>
+.pagination {
+    display: flex;
+    justify-content: center;
+    margin-top: 20px;
+}
+
+.pagination .page-link {
+    color: #007bff;
+}
+
+.pagination .active .page-link {
+    background-color: #007bff;
+    color: #fff;
+    border-color: #007bff;
+}
+</style>
     <title>TrikeSafe Admin - Bookings</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
@@ -492,15 +648,25 @@ $result = mysqli_query($db, $sql);
             <table class="table table-striped">
                 <thead>
                     <tr>
-                        <th>ID</th>
-                        <th>Type</th>
-                        <th>Passenger</th>
-                        <th>Driver</th>
-                        <th>Pickup</th>
-                        <th>Dropoff</th>
-                        <th>Status</th>
-                        <th>Fare</th>
-                        <th>Created</th>
+                        <?php 
+						// Toggle sorting order
+						$order = isset($_GET['order']) && $_GET['order'] === 'asc' ? 'desc' : 'asc'; 
+						?>
+
+						<th><a href="?sort=id&order=<?php echo $order; ?>">ID</a></th>
+						<th><a href="?sort=booking_type&order=<?php echo $order; ?>">Type</a></th>
+						<th>
+    <a href="?page=1&sort=tour_package_name&order=<?php echo ($sort_column === 'tour_package_name' && $sort_order === 'ASC') ? 'desc' : 'asc'; ?>">
+        Tour Package
+    </a>
+</th>
+						<th><a href="?sort=passenger_name&order=<?php echo $order; ?>">Passenger</a></th>
+						<th><a href="?sort=driver_name&order=<?php echo $order; ?>">Driver</a></th>
+						<th><a href="?sort=rating&order=<?php echo $order; ?>">Rating</a></th>
+						<th><a href="?sort=comment&order=<?php echo $order; ?>">Comment</a></th>
+						<th><a href="?sort=status&order=<?php echo $order; ?>">Status</a></th>
+						<th><a href="?sort=total_fare&order=<?php echo $order; ?>">Fare</a></th>
+						<th><a href="?sort=created_at&order=<?php echo $order; ?>">Created</a></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -508,10 +674,11 @@ $result = mysqli_query($db, $sql);
                     <tr>
                         <td><?php echo $row['id']; ?></td>
                         <td><?php echo ucfirst($row['booking_type']); ?></td>
+						<td><?php echo htmlentities($row['tour_package_name']); ?></td>
                         <td><?php echo $row['passenger_name']; ?></td>
                         <td><?php echo $row['driver_name'] ?? 'Unassigned'; ?></td>
-                        <td><?php echo $row['pickup_location']; ?></td>
-                        <td><?php echo $row['dropoff_location']; ?></td>
+                        <td><?php echo isset($row['rating']) ? $row['rating'] : 'N/A'; ?></td>
+                        <td><?php echo !empty($row['comment']) ? htmlentities($row['comment']) : 'No comment'; ?></td>
                         <td>
                             <span class="badge bg-<?php 
                                 echo match($row['status']) {
@@ -532,5 +699,35 @@ $result = mysqli_query($db, $sql);
             </table>
         </div>
     </div>
+	<div class="pagination">
+    <nav>
+        <ul class="pagination">
+            <?php if ($page > 1): ?>
+                <li class="page-item">
+                    <a class="page-link" href="?page=1&sort=<?php echo $sort_column; ?>&order=<?php echo $sort_order; ?>">First</a>
+                </li>
+                <li class="page-item">
+                    <a class="page-link" href="?page=<?php echo $page - 1; ?>&sort=<?php echo $sort_column; ?>&order=<?php echo $sort_order; ?>">Previous</a>
+                </li>
+            <?php endif; ?>
+
+            <?php for ($i = 1; $i <= $total_pages; $i++): ?>
+                <li class="page-item <?php echo ($i === $page) ? 'active' : ''; ?>">
+                    <a class="page-link" href="?page=<?php echo $i; ?>&sort=<?php echo $sort_column; ?>&order=<?php echo $sort_order; ?>"><?php echo $i; ?></a>
+                </li>
+            <?php endfor; ?>
+
+            <?php if ($page < $total_pages): ?>
+                <li class="page-item">
+                    <a class="page-link" href="?page=<?php echo $page + 1; ?>&sort=<?php echo $sort_column; ?>&order=<?php echo $sort_order; ?>">Next</a>
+                </li>
+                <li class="page-item">
+                    <a class="page-link" href="?page=<?php echo $total_pages; ?>&sort=<?php echo $sort_column; ?>&order=<?php echo $sort_order; ?>">Last</a>
+                </li>
+            <?php endif; ?>
+        </ul>
+    </nav>
+</div>
+
 </body>
 </html>

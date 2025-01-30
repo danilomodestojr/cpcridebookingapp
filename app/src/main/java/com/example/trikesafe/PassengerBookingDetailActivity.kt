@@ -6,7 +6,9 @@ import android.os.Bundle
 import android.util.Log
 import android.view.View
 import android.widget.Button
+import android.widget.EditText
 import android.widget.ImageButton
+import android.widget.RatingBar
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -66,6 +68,8 @@ class PassengerBookingDetailActivity : AppCompatActivity() {
         setupMap(booking!!)
 
         setupRefreshButton()
+
+        setupButtons()  // Make sure this is called
 
         // Setup completion confirmation button
         setupConfirmButton()
@@ -211,13 +215,203 @@ class PassengerBookingDetailActivity : AppCompatActivity() {
     private fun showCompletionSuccess() {
         AlertDialog.Builder(this)
             .setTitle("Trip Completed")
-            .setMessage("Thank you for using our service!")
-            .setPositiveButton("OK") { _, _ ->
+            .setMessage("Thank you for using our service! Would you like to provide feedback for your driver?")
+            .setPositiveButton("Give Feedback") { _, _ ->
+                showFeedbackDialog()
+            }
+            .setNegativeButton("Skip") { _, _ ->
                 // Return to main passenger screen
-                startActivity(Intent(this, PassengerActivity::class.java))
+                val intent = Intent(this, PassengerActivity::class.java)
+                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                startActivity(intent)
                 finish()
             }
             .setCancelable(false)
+            .show()
+    }
+
+    private fun setupButtons() {
+        val cancelButton = findViewById<Button>(R.id.cancelButton)
+        val confirmButton = findViewById<Button>(R.id.confirmButton)
+        val feedbackButton = findViewById<Button>(R.id.feedbackButton)
+
+        when (booking?.status) {
+            "pending" -> {
+                cancelButton.apply {
+                    visibility = View.VISIBLE
+                    setOnClickListener { showCancelConfirmation() }
+                }
+                confirmButton.visibility = View.GONE
+                feedbackButton.visibility = View.GONE
+            }
+            "accepted" -> {
+                cancelButton.visibility = View.GONE
+                confirmButton.apply {
+                    visibility = View.VISIBLE
+                    setOnClickListener { showCompletionConfirmation() }
+                }
+                feedbackButton.visibility = View.GONE
+            }
+            "completed" -> {
+                cancelButton.visibility = View.GONE
+                confirmButton.visibility = View.GONE
+                feedbackButton.apply {
+                    visibility = View.VISIBLE
+                    setOnClickListener { showFeedbackDialog() }
+                }
+            }
+            else -> {
+                cancelButton.visibility = View.GONE
+                confirmButton.visibility = View.GONE
+                feedbackButton.visibility = View.GONE
+            }
+        }
+    }
+
+    private fun showFeedbackDialog() {
+        val dialogView = layoutInflater.inflate(R.layout.dialog_feedback, null)
+        val ratingBar = dialogView.findViewById<RatingBar>(R.id.ratingBar)
+        val commentEditText = dialogView.findViewById<EditText>(R.id.commentEditText)
+
+        AlertDialog.Builder(this)
+            .setTitle("Rate Your Trip")
+            .setView(dialogView)
+            .setPositiveButton("Submit") { _, _ ->
+                submitFeedback(
+                    rating = ratingBar.rating,
+                    comment = commentEditText.text.toString()
+                )
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun submitFeedback(rating: Float, comment: String) {
+        val loadingDialog = AlertDialog.Builder(this)
+            .setMessage("Submitting feedback...")
+            .setCancelable(false)
+            .create()
+        loadingDialog.show()
+
+        booking?.let { currentBooking ->
+            val sharedPreferences = getSharedPreferences("login_pref", Context.MODE_PRIVATE)
+            val passengerId = sharedPreferences.getInt("user_id", 0)
+
+            ApiClient.getApi(this).submitFeedback(
+                bookingId = currentBooking.id,
+                passengerId = passengerId,
+                driverId = currentBooking.driver_id ?: 0,
+                rating = rating,
+                comment = comment
+            ).enqueue(object : Callback<ApiResponse> {
+                override fun onResponse(call: Call<ApiResponse>, response: Response<ApiResponse>) {
+                    loadingDialog.dismiss()
+                    if (response.isSuccessful && response.body()?.success == true) {
+                        showFeedbackSuccess()
+                    } else {
+                        showError("Failed to submit feedback. Please try again.")
+                    }
+                }
+
+                override fun onFailure(call: Call<ApiResponse>, t: Throwable) {
+                    loadingDialog.dismiss()
+                    showError("Network error: ${t.message}")
+                }
+            })
+        }
+    }
+
+    private fun showFeedbackSuccess() {
+        AlertDialog.Builder(this)
+            .setTitle("Thank You!")
+            .setMessage("Your feedback has been submitted successfully.")
+            .setPositiveButton("OK") { _, _ ->
+                finish()
+            }
+            .setCancelable(false)
+            .show()
+    }
+
+    private fun showCancelConfirmation() {
+        AlertDialog.Builder(this)
+            .setTitle("Cancel Booking")
+            .setMessage("Are you sure you want to cancel this booking?")
+            .setPositiveButton("Yes") { _, _ -> attemptToCancel() }
+            .setNegativeButton("No", null)
+            .show()
+    }
+
+    private fun attemptToCancel() {
+        val loadingDialog = AlertDialog.Builder(this)
+            .setMessage("Processing cancellation...")
+            .setCancelable(false)
+            .create()
+        loadingDialog.show()
+
+        booking?.let { currentBooking ->
+            val sharedPreferences = getSharedPreferences("login_pref", Context.MODE_PRIVATE)
+            val passengerId = sharedPreferences.getInt("user_id", 0)
+
+            ApiClient.getApi(this).cancelBooking(
+                bookingId = currentBooking.id,
+                passengerId = passengerId
+            ).enqueue(object : Callback<ApiResponse> {
+                override fun onResponse(call: Call<ApiResponse>, response: Response<ApiResponse>) {
+                    loadingDialog.dismiss()
+                    if (response.isSuccessful && response.body()?.success == true) {
+                        showCancelSuccess()
+                    } else {
+                        val message = response.body()?.message ?: "Unable to cancel booking"
+                        if (message.contains("already accepted", ignoreCase = true)) {
+                            showDriverAcceptedDialog()
+                        } else {
+                            showError(message)
+                        }
+                    }
+                }
+
+                override fun onFailure(call: Call<ApiResponse>, t: Throwable) {
+                    loadingDialog.dismiss()
+                    showError("Network error: ${t.message}")
+                }
+            })
+        }
+    }
+
+    private fun showCancelSuccess() {
+        AlertDialog.Builder(this)
+            .setTitle("Booking Cancelled")
+            .setMessage("Your booking has been cancelled successfully.")
+            .setPositiveButton("OK") { _, _ ->
+                // Start PassengerActivity and clear the activity stack
+                val intent = Intent(this, PassengerActivity::class.java)
+                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                startActivity(intent)
+                finish()
+            }
+            .setCancelable(false)
+            .show()
+    }
+
+    private fun showCompletionConfirmation() {
+        AlertDialog.Builder(this)
+            .setTitle("Complete Trip")
+            .setMessage("Are you sure you want to mark this trip as complete?")
+            .setPositiveButton("Yes") { _, _ ->
+                confirmTripCompletion()
+            }
+            .setNegativeButton("Not Yet", null)
+            .show()
+    }
+
+    private fun showDriverAcceptedDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("Cannot Cancel")
+            .setMessage("This booking cannot be cancelled as a driver has already accepted it. Please refresh to see driver details.")
+            .setPositiveButton("Refresh") { _, _ ->
+                refreshBookingStatus()
+            }
+            .setNegativeButton("OK", null)
             .show()
     }
 
@@ -318,7 +512,6 @@ class PassengerBookingDetailActivity : AppCompatActivity() {
 
         Log.d("PassengerBooking", "Refreshing booking status for passenger: $passengerId")
 
-        // Show loading indicator
         val loadingDialog = AlertDialog.Builder(this)
             .setMessage("Refreshing booking status...")
             .setCancelable(false)
@@ -330,14 +523,23 @@ class PassengerBookingDetailActivity : AppCompatActivity() {
                 loadingDialog.dismiss()
                 if (response.isSuccessful) {
                     response.body()?.let { updatedBooking ->
-                        val route = updatedBooking.route ?: "Unknown"  // ✅ Ensure `route_points` fallback
-                        val dropoffLocation = updatedBooking.dropoff_location ?: route  // ✅ Set dropoff to route if empty
+                        Log.d("PassengerBooking", "Booking status: ${updatedBooking.status}")  // Add this log
 
-                        Log.d("PassengerBooking", "Route: $route")
-                        Log.d("PassengerBooking", "Dropoff Location: $dropoffLocation")
+                        val route = updatedBooking.route ?: "Unknown"
+                        val dropoffLocation = updatedBooking.dropoff_location ?: route
+
+                        // Show driver details message if booking is accepted
+                        if (updatedBooking.status == "accepted") {
+                            showDriverFoundMessage()
+                        }
+                        // Show feedback option if booking is completed
+                        else if (updatedBooking.status == "completed") {
+                            findViewById<Button>(R.id.feedbackButton).visibility = View.VISIBLE
+                        }
 
                         booking = updatedBooking.copy(route = route, dropoff_location = dropoffLocation)
                         displayBookingDetails(booking!!)
+                        setupButtons()
                     } ?: run {
                         Log.e("PassengerBooking", "Received null booking")
                     }
@@ -348,7 +550,7 @@ class PassengerBookingDetailActivity : AppCompatActivity() {
                 }
             }
 
-            override fun onFailure(call: Call<Booking?>, t: Throwable) {  // Fixed this line
+            override fun onFailure(call: Call<Booking?>, t: Throwable) {
                 loadingDialog.dismiss()
                 Log.e("PassengerBooking", "Network error", t)
                 showError("Failed to refresh: ${t.message}")

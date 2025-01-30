@@ -201,7 +201,7 @@ class BookingManager(
         
         Description: ${tourPackage.description}
         
-        Places to Visit: ${tourPackage.route_Points}
+       
         
         Duration: ${String.format("%.1f", durationHours)} hours
         Price: ₱${String.format("%.2f", tourPackage.price)}

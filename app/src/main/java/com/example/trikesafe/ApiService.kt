@@ -80,6 +80,25 @@ interface ApiService {
         @Field("passenger_id") passengerId: Int
     ): Call<ApiResponse>
 
+    @FormUrlEncoded
+    @POST("bookings.php")
+    fun cancelBooking(
+        @Field("action") action: String = "cancel",
+        @Field("booking_id") bookingId: Int,
+        @Field("passenger_id") passengerId: Int
+    ): Call<ApiResponse>
+
+    @FormUrlEncoded
+    @POST("bookings.php")
+    fun submitFeedback(
+        @Field("action") action: String = "feedback",
+        @Field("booking_id") bookingId: Int,
+        @Field("passenger_id") passengerId: Int,
+        @Field("driver_id") driverId: Int,
+        @Field("rating") rating: Float,
+        @Field("comment") comment: String
+    ): Call<ApiResponse>
+
     // ✅ Ensure `dropoff_latitude` and `dropoff_longitude` are properly included
     @FormUrlEncoded
     @POST("bookings.php")
